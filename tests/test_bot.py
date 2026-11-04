@@ -15,7 +15,9 @@ class MemoryApi:
         self.sent = []
         self.answered = []
 
-    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None, app_button=None):
+    def send_message(
+        self, chat_id, text, buttons=None, keyboard=None, placeholder=None, app_button=None, remove_keyboard=False
+    ):
         self.sent.append(
             {
                 "chat_id": chat_id,
@@ -24,6 +26,7 @@ class MemoryApi:
                 "keyboard": keyboard,
                 "placeholder": placeholder,
                 "app_button": app_button,
+                "remove_keyboard": remove_keyboard,
             }
         )
 
@@ -154,7 +157,9 @@ class BotTests(unittest.TestCase):
     def test_web_app_choice_is_not_an_order(self):
         self.bot.app_url = "https://example.com/app"
         self.bot.handle(_message(10, "/start"))
-        self.assertEqual(self.api.sent[-1]["app_button"], ("Открыть магазин", "https://example.com/app"))
+        self.assertIsNone(self.api.sent[-1]["app_button"])
+        self.assertTrue(self.api.sent[-1]["remove_keyboard"])
+        self.assertNotIn("Открыть магазин", self.api.sent[-1]["text"])
         self.bot.handle(
             {
                 "message": {
@@ -177,15 +182,28 @@ class BotTests(unittest.TestCase):
             }
         )
         self.assertEqual(self.api.sent[-1]["text"], "Premium на 12 мес. для @buddy.\nК оплате 36.24 USDT.")
+        self.bot.handle(
+            {
+                "message": {
+                    "chat": {"id": 10, "type": "private"},
+                    "from": {"id": 10},
+                    "web_app_data": {
+                        "data": '{"kind":"stars","recipient":"alexdev","amount":50,"pay":"heleket"}'
+                    },
+                }
+            }
+        )
+        self.assertIn("Heleket", self.api.sent[-1]["text"])
+        self.assertIn("0.94 USDT", self.api.sent[-1]["text"])
 
-    def test_mini_app_stays_black_and_white(self):
+    def test_mini_app_keeps_the_chosen_colors(self):
         page = Path(__file__).parents[1].joinpath("shop/webapp/index.html").read_text(encoding="utf-8")
-        self.assertIn("18.75", page)
-        self.assertIn("36.24", page)
-        self.assertIn("14.99", page)
-        self.assertNotIn("#2f6", page.lower())
-        self.assertNotIn("blue", page.lower())
-        self.assertNotIn("rgb(", page.lower())
+        self.assertIn("#2AABEE", page)
+        self.assertIn("#FFCC00", page)
+        self.assertIn("Банковская карта", page)
+        self.assertIn("Crypto Bot", page)
+        self.assertIn("Heleket", page)
+        self.assertIn('id="theme"', page)
 
     def _assert_payment_is_left_out(self, text: str) -> None:
         lowered = text.lower()

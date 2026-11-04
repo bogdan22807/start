@@ -26,9 +26,12 @@ class TelegramApi:
         keyboard: list[list[str]] | None = None,
         placeholder: str | None = None,
         app_button: tuple[str, str] | None = None,
+        remove_keyboard: bool = False,
     ) -> None:
         payload: dict = {"chat_id": chat_id, "text": text}
-        if app_button is not None:
+        if remove_keyboard:
+            payload["reply_markup"] = {"remove_keyboard": True}
+        elif app_button is not None:
             label, url = app_button
             payload["reply_markup"] = {
                 "keyboard": [[{"text": label, "web_app": {"url": url}}]],

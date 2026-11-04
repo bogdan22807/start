@@ -1,62 +1,91 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f7f8fa">
   <title>Магазин</title>
   <style>
-    :root {
-      --bg: #000;
-      --card: #141414;
+    :root, [data-theme="light"] {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --line: #e4e7ec;
+      --text: #1c1e21;
+      --muted: #8b919a;
+      --dim: #b0b6be;
+      --accent: #2AABEE;
+      --star: #FFCC00;
+      --pill: #eef1f4;
+      --footer-line: #e6e8ec;
+    }
+    [data-theme="dark"] {
+      --bg: #000000;
+      --card: #161616;
       --line: #2a2a2a;
-      --text: #fff;
+      --text: #ffffff;
       --muted: #8f8f8f;
       --dim: #5c5c5c;
+      --accent: #2AABEE;
+      --star: #FFCC00;
+      --pill: #1c1c1c;
+      --footer-line: #1c1c1c;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; background: var(--bg); color: var(--text); }
     body {
       min-height: 100dvh;
       font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      accent-color: #fff;
+      accent-color: #2AABEE;
     }
     button, input { font: inherit; color: inherit; background: none; border: 0; }
     main { padding: 18px 16px 28px; }
+    .bar { display: flex; gap: 8px; align-items: center; }
     .switch, .who {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 4px;
       padding: 4px;
-      background: var(--card);
+      background: var(--pill);
       border-radius: 14px;
     }
-    .switch button, .who button {
+    .switch { flex: 1; }
+    .switch button, .who button, #theme {
       height: 40px;
       border-radius: 11px;
       color: var(--muted);
     }
-    .switch button.on, .who button.on { background: var(--text); color: var(--bg); font-weight: 600; }
-    h1 {
+    .switch button.on, .who button.on { background: var(--accent); color: #fff; font-weight: 600; }
+    #theme {
+      width: 44px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 18px;
+    }
+    h1, h2 {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin: 22px 0 22px;
+      margin: 22px 0;
       font-size: 28px;
       font-weight: 650;
       letter-spacing: -0.03em;
     }
+    h2 { font-size: 24px; }
     .mark {
       width: 42px;
       height: 42px;
       display: grid;
       place-items: center;
       border-radius: 12px;
-      background: var(--text);
-      color: var(--bg);
+      border: 1px solid var(--line);
+      background: var(--card);
       font-size: 22px;
     }
+    .mark.star { color: var(--star); }
+    .mark.pay { color: var(--accent); }
     .label {
       margin: 22px 0 8px;
       color: var(--muted);
@@ -64,7 +93,7 @@
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
-    .profile, .field, .card, .plan {
+    .profile, .field, .card, .plan, .method {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 18px;
@@ -76,19 +105,21 @@
       border-radius: 50%;
       display: grid;
       place-items: center;
-      background: #222;
+      background: var(--pill);
+      color: var(--accent);
       font-weight: 650;
     }
     .handle, .sub, .price { color: var(--muted); }
     .handle, .sub { font-size: 14px; }
     .field { width: 100%; margin-top: 12px; padding: 16px; }
-    .field:focus { outline: none; border-color: var(--text); }
+    .field:focus { outline: none; border-color: var(--accent); }
     .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .card { min-height: 86px; padding: 14px 6px; text-align: center; }
     .card .qty { font-size: 18px; font-weight: 650; }
+    .card .star { color: var(--star); }
     .card .price { margin-top: 4px; font-size: 13px; }
-    .card.on, .plan.on { border-color: var(--text); }
-    .plan {
+    .card.on, .plan.on { border-color: var(--accent); }
+    .plan, .method {
       width: 100%;
       display: flex;
       align-items: center;
@@ -101,20 +132,21 @@
       width: 18px;
       height: 18px;
       flex: none;
-      border: 1.5px solid var(--text);
+      border: 1.5px solid var(--accent);
       border-radius: 50%;
     }
-    .plan.on .radio { background: var(--text); box-shadow: inset 0 0 0 4px var(--bg); }
-    .plan .name { font-weight: 600; }
+    .plan.on .radio { background: var(--accent); box-shadow: inset 0 0 0 4px var(--card); }
+    .plan .name, .method .name { font-weight: 600; }
     .plan .sum { margin-left: auto; text-align: right; font-weight: 650; }
     .custom { display: block; margin-top: 16px; color: var(--muted); font-size: 14px; }
     [hidden] { display: none !important; }
+    .back { color: var(--accent); font-weight: 600; padding: 0; }
     footer {
       position: sticky;
       bottom: 0;
       padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
       background: var(--bg);
-      border-top: 1px solid #1c1c1c;
+      border-top: 1px solid var(--footer-line);
     }
     .due { display: flex; justify-content: space-between; margin-bottom: 10px; }
     .due span { color: var(--muted); }
@@ -122,19 +154,22 @@
       width: 100%;
       height: 52px;
       border-radius: 16px;
-      background: var(--text);
-      color: var(--bg);
+      background: var(--accent);
+      color: #fff;
       font-weight: 650;
     }
-    #pay:disabled { background: #1a1a1a; color: var(--dim); }
+    #pay:disabled { background: var(--pill); color: var(--dim); }
     .note { min-height: 18px; margin: 8px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
   </style>
 </head>
 <body>
-  <main>
-    <div class="switch" id="product">
-      <button type="button" data-product="stars" class="on">Звёзды</button>
-      <button type="button" data-product="premium">Premium</button>
+  <main id="shop">
+    <div class="bar">
+      <div class="switch" id="product">
+        <button type="button" data-product="stars" class="on">Звёзды</button>
+        <button type="button" data-product="premium">Premium</button>
+      </div>
+      <button type="button" id="theme" aria-label="Сменить тему">☾</button>
     </div>
     <h1 id="title"></h1>
     <p class="label">Получатель</p>
@@ -149,10 +184,19 @@
       <input class="field" id="custom" inputmode="numeric" placeholder="от 50 до 100 000" autocomplete="off">
     </label>
   </main>
+  <main id="paywall" hidden>
+    <button type="button" class="back" id="payBack">← Назад</button>
+    <h2><span class="mark pay">₽</span> Оплата</h2>
+    <p class="label">Банковская карта</p>
+    <button type="button" class="method" data-pay="card"><span class="mark pay">▣</span><span class="name">Банковская карта</span></button>
+    <p class="label">Криптой</p>
+    <button type="button" class="method" data-pay="cryptobot"><span class="mark pay">✈</span><span class="name">Crypto Bot</span></button>
+    <button type="button" class="method" data-pay="heleket"><span class="mark pay">◈</span><span class="name">Heleket</span></button>
+    <p class="note" id="payNote"></p>
+  </main>
   <footer>
     <div class="due"><span>К оплате</span><strong id="due">0.00 USDT</strong></div>
     <button type="button" id="pay">Оплатить</button>
-    <p class="note" id="note"></p>
   </footer>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
@@ -169,6 +213,7 @@
       [6, "19.99", "3.33"],
       [12, "36.24", "3.02"]
     ];
+    const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
     const STAR_MIN = 50;
     const STAR_MAX = 100000;
 
@@ -177,7 +222,8 @@
       who: "self",
       pack: 1000,
       months: 12,
-      custom: ""
+      custom: "",
+      theme: "light"
     };
     const tg = window.Telegram && window.Telegram.WebApp;
     const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
@@ -185,11 +231,6 @@
     if (tg) {
       tg.ready();
       tg.expand();
-      try { tg.setHeaderColor("#000000"); } catch (error) {}
-      try { tg.setBackgroundColor("#000000"); } catch (error) {}
-      if (tg.setBottomBarColor) {
-        try { tg.setBottomBarColor("#000000"); } catch (error) {}
-      }
     }
 
     const title = document.getElementById("title");
@@ -200,7 +241,9 @@
     const custom = document.getElementById("custom");
     const due = document.getElementById("due");
     const pay = document.getElementById("pay");
-    const note = document.getElementById("note");
+    const shop = document.getElementById("shop");
+    const paywall = document.getElementById("paywall");
+    const themeButton = document.getElementById("theme");
 
     function money(cents) {
       return (cents / 100).toFixed(2);
@@ -250,11 +293,27 @@
       return document.getElementById("friendName") ? document.getElementById("friendName").value.trim().replace(/^@/, "") : "";
     }
 
+    function applyTheme() {
+      document.documentElement.dataset.theme = state.theme;
+      const dark = state.theme === "dark";
+      themeButton.textContent = dark ? "☀" : "☾";
+      const color = dark ? "#000000" : "#f7f8fa";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", color);
+      document.querySelector('meta[name="color-scheme"]').setAttribute("content", dark ? "dark" : "light");
+      if (!tg) return;
+      try { tg.setHeaderColor(color); } catch (error) {}
+      try { tg.setBackgroundColor(color); } catch (error) {}
+      if (tg.setBottomBarColor) {
+        try { tg.setBottomBarColor(color); } catch (error) {}
+      }
+    }
+
     function render() {
       const stars = state.product === "stars";
       title.innerHTML = stars
-        ? '<span class="mark">★</span> Telegram Stars'
-        : '<span class="mark">♛</span> Telegram Premium';
+        ? '<span class="mark star">★</span> Telegram Stars'
+        : '<span class="mark pay">♛</span> Telegram Premium';
       section.textContent = stars ? "Количество" : "Срок";
       customLabel.hidden = !stars;
       document.querySelectorAll("#product button").forEach((button) => {
@@ -325,7 +384,7 @@
         button.type = "button";
         button.className = "card" + (pack[0] === amount ? " on" : "");
         button.innerHTML = '<div class="qty"></div><div class="price"></div>';
-        button.querySelector(".qty").textContent = "★ " + pack[0].toLocaleString("ru-RU");
+        button.querySelector(".qty").innerHTML = '<span class="star">★</span> ' + pack[0].toLocaleString("ru-RU");
         button.querySelector(".price").textContent = pack[1] + " USDT";
         button.addEventListener("click", () => {
           state.pack = pack[0];
@@ -343,27 +402,25 @@
       return "месяцев";
     }
 
-    document.getElementById("product").addEventListener("click", (event) => {
-      const button = event.target.closest("button");
-      if (!button) return;
-      state.product = button.dataset.product;
-      note.textContent = "";
-      render();
-    });
-    document.getElementById("who").addEventListener("click", (event) => {
-      const button = event.target.closest("button");
-      if (!button) return;
-      state.who = button.dataset.who;
-      note.textContent = "";
-      render();
-    });
-    custom.addEventListener("input", () => {
-      state.custom = custom.value;
-      render();
-    });
-    pay.addEventListener("click", () => {
+    function showShop() {
+      shop.hidden = false;
+      paywall.hidden = true;
+      pay.hidden = false;
+      document.getElementById("payNote").textContent = "";
+    }
+
+    function showPay() {
       const picked = selection();
       if (!picked.ok) return;
+      shop.hidden = true;
+      paywall.hidden = false;
+      pay.hidden = true;
+    }
+
+    function sendChoice(method) {
+      const picked = selection();
+      if (!picked.ok) return;
+      picked.pay = method;
       const payload = JSON.stringify(picked);
       if (tg && typeof tg.sendData === "function") {
         try {
@@ -371,8 +428,38 @@
           return;
         } catch (error) {}
       }
-      note.textContent = "Выбрано: " + picked.label + " для @" + picked.recipient + ". Оплата пока не списывается.";
+      document.getElementById("payNote").textContent =
+        "Выбрано: " + picked.label + " для @" + picked.recipient + ". " + PAY_NAMES[method] + ". Деньги не списываются.";
+    }
+
+    themeButton.addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      applyTheme();
     });
+    document.getElementById("product").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      state.product = button.dataset.product;
+      render();
+    });
+    document.getElementById("who").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      state.who = button.dataset.who;
+      render();
+    });
+    custom.addEventListener("input", () => {
+      state.custom = custom.value;
+      render();
+    });
+    pay.addEventListener("click", showPay);
+    document.getElementById("payBack").addEventListener("click", showShop);
+    paywall.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-pay]");
+      if (!button) return;
+      sendChoice(button.dataset.pay);
+    });
+    applyTheme();
     render();
   </script>
 </body>

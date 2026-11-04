@@ -49,6 +49,7 @@ class Draft:
 _DEFAULT_APP = "https://htmlpreview.github.io/?https://github.com/bogdan22807/start/blob/main/docs/index.html"
 _STAR_PACKS = {50: "0.94", 100: "1.88", 250: "4.69", 500: "9.38", 1000: "18.75", 2500: "46.88"}
 _APP_PREMIUM = {3: "14.99", 6: "19.99", 12: "36.24"}
+_PAY_NAMES = {"card": "Банковская карта", "cryptobot": "Crypto Bot", "heleket": "Heleket"}
 
 
 class ShopBot:
@@ -153,7 +154,7 @@ class ShopBot:
     def _show_menu(self, chat_id: int, text: str = "Выберите действие:") -> None:
         if self.app_url:
             shown = "Магазин звёзд и Premium." if text == "Выберите действие:" else text
-            self.api.send_message(chat_id, shown, app_button=("Открыть магазин", self.app_url))
+            self.api.send_message(chat_id, shown, remove_keyboard=True)
             return
         self.api.send_message(chat_id, text, keyboard=_MENU)
 
@@ -164,7 +165,7 @@ class ShopBot:
             payload = None
         text = _app_summary(payload)
         if self.app_url:
-            self.api.send_message(chat_id, text, app_button=("Открыть магазин", self.app_url))
+            self.api.send_message(chat_id, text, remove_keyboard=True)
             return
         self.api.send_message(chat_id, text, keyboard=_MENU)
 
@@ -401,7 +402,7 @@ def _app_summary(payload: object) -> str:
             amount = 0
         if amount < _STAR_MIN or amount > 100_000:
             return "Для звёзд нужно число от 50 до 100 000."
-        return f"{amount} звёзд для @{recipient}.\nК оплате {_star_total(amount)} USDT."
+        return _with_pay(f"{amount} звёзд для @{recipient}.\nК оплате {_star_total(amount)} USDT.", payload)
     if kind == "premium":
         try:
             months = int(payload.get("months"))
@@ -410,8 +411,15 @@ def _app_summary(payload: object) -> str:
         total = _APP_PREMIUM.get(months)
         if total is None:
             return "Для Premium доступны 3, 6 или 12 месяцев."
-        return f"Premium на {months} мес. для @{recipient}.\nК оплате {total} USDT."
+        return _with_pay(f"Premium на {months} мес. для @{recipient}.\nК оплате {total} USDT.", payload)
     return "Неизвестный выбор."
+
+
+def _with_pay(text: str, payload: dict) -> str:
+    method = _PAY_NAMES.get(str(payload.get("pay") or ""))
+    if not method:
+        return text
+    return f"{text}\n{method}."
 
 
 def _star_total(amount: int) -> str:
