@@ -39,7 +39,7 @@ class ShopBot:
         self.api.send_message(
             int(chat["id"]),
             welcome_text(raw_name),
-            link_button=(BUY_STARS, self.app_url),
+            open_button=(BUY_STARS, self.app_url),
         )
 
     def run(self) -> None:

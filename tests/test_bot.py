@@ -21,6 +21,7 @@ class MemoryApi:
         placeholder=None,
         app_button=None,
         remove_keyboard=False,
+        open_button=None,
         link_button=None,
     ):
         self.sent.append(
@@ -32,6 +33,7 @@ class MemoryApi:
                 "placeholder": placeholder,
                 "app_button": app_button,
                 "remove_keyboard": remove_keyboard,
+                "open_button": open_button,
                 "link_button": link_button,
             }
         )
@@ -64,12 +66,13 @@ class BotTests(unittest.TestCase):
         self.api = MemoryApi()
         self.bot = ShopBot(self.api, "https://shop.example")
 
-    def test_start_greets_by_name_and_links_the_shop(self):
+    def test_start_greets_by_name_and_opens_the_shop(self):
         self.bot.handle(_message(10, "/start", first_name="Богдан"))
         sent = self.api.sent[-1]
         self.assertEqual(sent["text"], welcome_text("Богдан"))
         self.assertIn("кнопки ниже", sent["text"])
-        self.assertEqual(sent["link_button"], ("Купить звезды", "https://shop.example"))
+        self.assertEqual(sent["open_button"], ("Купить звезды", "https://shop.example"))
+        self.assertIsNone(sent["link_button"])
         self.assertIsNone(sent["app_button"])
         self.assertFalse(sent["remove_keyboard"])
         self.assertNotIn("Открыть магазин", sent["text"])
@@ -81,7 +84,7 @@ class BotTests(unittest.TestCase):
     def test_start_at_mention_uses_the_same_screen(self):
         self.bot.handle(_message(10, "/start@ShopBot", first_name="Анна"))
         sent = self.api.sent[-1]
-        self.assertEqual(sent["link_button"][0], "Купить звезды")
+        self.assertEqual(sent["open_button"], ("Купить звезды", "https://shop.example"))
         self.assertIsNone(sent["app_button"])
 
     def test_other_messages_do_nothing(self):
@@ -139,6 +142,8 @@ class BotTests(unittest.TestCase):
         self.assertIn("/api/invoice", page)
         self.assertIn("init_data", page)
         self.assertIn("openTelegramLink", page)
+        self.assertIn('id="openPay"', page)
+        self.assertIn(">Открыть</button>", page)
         self.assertNotIn("деньги не списываются", folded)
         self.assertNotIn("украин", folded)
         self.assertNotIn("мир", folded)

@@ -2,11 +2,18 @@
 
 import json
 import os
+import sys
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from shop.bot import ShopBot
 from shop.errors import ShopError
 from shop.telegram_api import TelegramApi
+from shop.tokens import telegram_bot_token
 
 
 class handler(BaseHTTPRequestHandler):
@@ -28,7 +35,7 @@ class handler(BaseHTTPRequestHandler):
             update = json.loads(raw.decode())
         except json.JSONDecodeError:
             update = {}
-        token = os.environ.get("BOT_TOKEN", "").strip()
+        token = telegram_bot_token()
         if token and isinstance(update, dict):
             try:
                 ShopBot(TelegramApi(token)).handle(update)

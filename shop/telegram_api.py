@@ -27,10 +27,14 @@ class TelegramApi:
         placeholder: str | None = None,
         app_button: tuple[str, str] | None = None,
         remove_keyboard: bool = False,
+        open_button: tuple[str, str] | None = None,
         link_button: tuple[str, str] | None = None,
     ) -> None:
         payload: dict = {"chat_id": chat_id, "text": text}
-        if link_button is not None:
+        if open_button is not None:
+            label, url = open_button
+            payload["reply_markup"] = {"inline_keyboard": [[{"text": label, "web_app": {"url": url}}]]}
+        elif link_button is not None:
             label, url = link_button
             payload["reply_markup"] = {"inline_keyboard": [[{"text": label, "url": url}]]}
         elif remove_keyboard:
@@ -77,7 +81,7 @@ class TelegramApi:
     def set_menu_button(self, url: str) -> None:
         self._call(
             "setChatMenuButton",
-            {"menu_button": {"type": "web_app", "text": "Магазин", "web_app": {"url": url}}},
+            {"menu_button": {"type": "web_app", "text": "Открыть", "web_app": {"url": url}}},
         )
 
     def clear_menu_button(self) -> None:

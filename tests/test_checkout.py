@@ -298,7 +298,10 @@ class CheckoutTests(unittest.TestCase):
         sent = []
         folder = tempfile.TemporaryDirectory()
         try:
-            with purchase_env(BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")):
+            RecordingTelegram.sent = []
+            with purchase_env(BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")), patch(
+                "shop.checkout.TelegramApi", RecordingTelegram
+            ):
                 create_invoice(
                     {
                         "kind": "stars",
@@ -309,6 +312,9 @@ class CheckoutTests(unittest.TestCase):
                     cryptopay=pay,
                 )
                 self.assertEqual(json.loads(pay.invoice["payload"])["order"]["buyer_id"], 4242)
+                self.assertEqual(RecordingTelegram.sent[0][0], 4242)
+                self.assertEqual(RecordingTelegram.sent[0][2][0], "Открыть")
+                self.assertTrue(RecordingTelegram.sent[0][2][1].startswith("https://t.me/"))
                 pay.invoice["status"] = "paid"
                 tell = lambda chat, text: sent.append((chat, text))
                 invoice_status(77, cryptopay=pay, fragment=fragment, sender=tell)
@@ -435,6 +441,16 @@ class HttpCheckoutTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertTrue(hooked["delivered"])
         self.assertEqual(len(FakeFragment.created), 2)
+
+
+class RecordingTelegram:
+    sent = []
+
+    def __init__(self, token, opener=None):
+        self.token = token
+
+    def send_message(self, chat_id, text, link_button=None, **kwargs):
+        RecordingTelegram.sent.append((chat_id, text, link_button))
 
 
 class FakePay:

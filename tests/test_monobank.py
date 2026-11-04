@@ -152,6 +152,14 @@ def _fragment(responses):
     return FragmentClient(FRAGMENT, "https://fragment.test", opener=Script(responses))
 
 
+class _QuietTelegram:
+    def __init__(self, token, opener=None):
+        self.token = token
+
+    def send_message(self, chat_id, text, link_button=None, **kwargs):
+        return None
+
+
 def _sign(private_key, body: bytes) -> str:
     signature = private_key.sign(body, ec.ECDSA(hashes.SHA256()))
     return base64.b64encode(signature).decode()
@@ -327,7 +335,9 @@ class CardCheckoutTests(unittest.TestCase):
         sent = []
         folder = tempfile.TemporaryDirectory()
         try:
-            with purchase_env(MONOBANK_CCY="840", BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")):
+            with purchase_env(MONOBANK_CCY="840", BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")), patch(
+                "shop.checkout.TelegramApi", _QuietTelegram
+            ):
                 create_invoice(
                     {
                         "kind": "stars",
