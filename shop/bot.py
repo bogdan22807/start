@@ -46,7 +46,7 @@ class Draft:
     recipient: str | None = None
 
 
-_DEFAULT_APP = "https://bogdan22807.github.io/start/"
+_DEFAULT_APP = "https://htmlpreview.github.io/?https://github.com/bogdan22807/start/blob/main/docs/index.html"
 _STAR_PACKS = {50: "0.94", 100: "1.88", 250: "4.69", 500: "9.38", 1000: "18.75", 2500: "46.88"}
 _APP_PREMIUM = {3: "14.99", 6: "19.99", 12: "36.24"}
 
