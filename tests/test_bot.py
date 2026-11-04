@@ -23,6 +23,7 @@ class BotTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.shop = make_shop(OrderStore(Path(self.tmp.name) / "orders.db"))
+        self.shop.create_order = self._order_is_not_created
         self.api = MemoryApi()
         self.bot = ShopBot(self.shop, self.api, {7})
 
@@ -30,62 +31,100 @@ class BotTests(unittest.TestCase):
         self.shop.store.close()
         self.tmp.cleanup()
 
-    def test_start_lists_priced_products_and_user_id(self):
+    def test_start_shows_stars_and_premium(self):
         self.bot.handle(_message(10, "/start"))
         sent = self.api.sent[-1]
-        self.assertEqual(sent["chat_id"], 10)
-        self.assertIn("Ваш Telegram id: 10", sent["text"])
-        labels = [row[0][0] for row in sent["buttons"]]
-        self.assertIn("100 звёзд — 1.25 USDT", labels)
-        self.assertIn("Premium 3 мес. — 12.50 USDT", labels)
+        labels = [button[0] for row in sent["buttons"] for button in row]
+        self.assertEqual(labels, ["Купить звезды", "Телеграм премиум"])
+        self.assertEqual([button[1] for row in sent["buttons"] for button in row], ["k:stars", "k:premium"])
 
-    def test_buyer_creates_order_and_admin_fulfills_it(self):
-        self.bot.handle(_callback(20, "alexdev", "b:stars_100"))
-        self.assertEqual(self.api.answered, ["cb-1"])
+    def test_stars_for_self_then_quantity_stops(self):
+        self.bot.handle(_callback(20, "alexdev", "k:stars"))
+        screen = self.api.sent[-1]
+        self.assertIn("Минимальный заказ от 50 звёзд.", screen["text"])
+        self.assertEqual(
+            [(button[0], button[1]) for button in screen["buttons"][0]],
+            [("Себе", "w:self:stars"), ("Другу", "w:friend:stars")],
+        )
+
+        self.bot.handle(_callback(20, "AlexDev", "w:self:stars"))
+        self.assertIn("Сколько звёзд отправить @alexdev?", self.api.sent[-1]["text"])
+
+        self.bot.handle(_message(20, "40", username="alexdev"))
+        self.assertIn("Минимальный заказ от 50", self.api.sent[-1]["text"])
+
+        self.bot.handle(_message(20, "50", username="alexdev"))
+        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: 50 звёзд для @alexdev.")
+        self.assertIsNone(self.api.sent[-1]["buttons"])
+
+    def test_stars_for_friend_asks_for_a_nick(self):
+        self.bot.handle(_callback(20, "alexdev", "k:stars"))
+        self.bot.handle(_callback(20, "alexdev", "w:friend:stars"))
+        self.assertEqual(self.api.sent[-1]["text"], "Напишите ник друга.")
         self.bot.handle(_message(20, "@Friend_Name", username="alexdev"))
-        buyer = self.api.sent[-2]
-        admin = self.api.sent[-1]
-        self.assertIn("К оплате 1.25 USDT", buyer["text"])
-        self.assertIn("для @friend_name", buyer["text"])
-        self.assertEqual(admin["chat_id"], 7)
-        order_id = buyer["text"].splitlines()[0].removeprefix("Заказ ")
+        self.assertIn("@friend_name", self.api.sent[-1]["text"])
+        self.bot.handle(_message(20, "100", username="alexdev"))
+        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: 100 звёзд для @friend_name.")
 
-        self.bot.handle(_message(20, f"/paid {order_id}"))
-        self.assertIn("только администратор", self.api.sent[-1]["text"])
-        self.assertEqual(self.shop.get_order(order_id).status, "pending_payment")
+    def test_premium_repeats_the_same_steps(self):
+        self.bot.handle(_callback(20, "alexdev", "k:premium"))
+        screen = self.api.sent[-1]
+        self.assertIn("3, 6 или 12 месяцев", screen["text"])
+        self.assertEqual(
+            [(button[0], button[1]) for button in screen["buttons"][0]],
+            [("Себе", "w:self:premium"), ("Другу", "w:friend:premium")],
+        )
 
-        self.bot.handle(_message(7, f"/paid {order_id}", username="owner"))
-        self.assertIn("выдан @friend_name", self.api.sent[-2]["text"])
-        self.assertEqual(self.api.sent[-1]["chat_id"], 20)
-        self.assertEqual(self.shop.get_order(order_id).status, "fulfilled")
+        self.bot.handle(_callback(20, "alexdev", "w:friend:premium"))
+        self.bot.handle(_message(20, "buddy", username="alexdev"))
+        months = self.api.sent[-1]
+        self.assertIn("@buddy", months["text"])
+        self.assertEqual(
+            [button[0] for button in months["buttons"][0]],
+            ["3 месяца", "6 месяцев", "12 месяцев"],
+        )
+        self.bot.handle(_callback(20, "alexdev", "q:6"))
+        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: Premium на 6 мес. для @buddy.")
 
-    def test_self_button_uses_telegram_username(self):
-        self.bot.handle(_callback(20, "alexdev", "m:premium_3m"))
-        buyer = next(item for item in self.api.sent if item["text"].startswith("Заказ"))
-        self.assertIn("для @alexdev", buyer["text"])
-        self.assertIn("К оплате 12.50 USDT", buyer["text"])
-        order_id = buyer["text"].splitlines()[0].removeprefix("Заказ ")
-        self.assertEqual(self.shop.store.get(order_id).buyer_chat_id, 20)
+        self.bot.handle(_callback(20, "alexdev", "w:self:premium"))
+        self.bot.handle(_callback(20, "alexdev", "q:12"))
+        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: Premium на 12 мес. для @alexdev.")
+
+    def test_self_without_username_asks_to_type_one(self):
+        self.bot.handle(_callback(20, None, "k:stars"))
+        self.bot.handle(_callback(20, None, "w:self:stars"))
+        self.assertIn("Напишите свой ник", self.api.sent[-1]["text"])
+        self.bot.handle(_message(20, "ownnick", username=None))
+        self.assertIn("@ownnick", self.api.sent[-1]["text"])
+
+    def _order_is_not_created(self, *args, **kwargs):
+        raise AssertionError("заказ создавать пока не нужно")
 
 
 def _message(user_id, text, username="buyer"):
+    user = {"id": user_id}
+    if username:
+        user["username"] = username
     return {
         "update_id": 1,
         "message": {
             "message_id": 1,
             "text": text,
-            "from": {"id": user_id, "username": username},
+            "from": user,
             "chat": {"id": user_id, "type": "private"},
         },
     }
 
 
 def _callback(user_id, username, data):
+    user = {"id": user_id}
+    if username:
+        user["username"] = username
     return {
         "update_id": 2,
         "callback_query": {
             "id": "cb-1",
-            "from": {"id": user_id, "username": username},
+            "from": user,
             "data": data,
             "message": {"message_id": 3, "chat": {"id": user_id, "type": "private"}},
         },
