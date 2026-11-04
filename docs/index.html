@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#FFFAF6">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
   <title>Магазин</title>
   <style>
     :root {
@@ -88,11 +88,23 @@
       width: 50px;
       height: 50px;
       flex: none;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      line-height: 0;
       border-radius: 18px;
       background: var(--card);
+      color: var(--text);
       box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
-      font-size: 22px;
     }
+    #theme svg {
+      grid-area: 1 / 1;
+      width: 22px;
+      height: 22px;
+      display: block;
+    }
+    html[data-theme="dark"] #theme .moon,
+    html[data-theme="light"] #theme .sun { display: none; }
     .switch button {
       position: relative;
       z-index: 1;
@@ -294,7 +306,9 @@
       box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
       text-align: left;
     }
-    .method .ico { width: 28px; height: 28px; flex: none; }
+    .method .ico { width: 32px; height: 32px; flex: none; object-fit: contain; }
+    .method .ico.card { width: 52px; height: 34px; }
+    .method .ico.heleket { width: 24px; height: 28px; }
     .method .name { display: block; font-weight: 700; }
     .method .sub { display: block; }
     .method.on {
@@ -371,19 +385,6 @@
       <path fill="#fff" fill-opacity=".72" d="M32 6 44 26 32 18 20 26Z"/>
       <path fill="#0E5EAE" fill-opacity=".35" d="M32 58 10 26h22Z"/>
     </symbol>
-    <symbol id="card" viewBox="0 0 64 64">
-      <rect x="6" y="14" width="52" height="36" rx="8" fill="#1B86EE"/>
-      <rect x="6" y="24" width="52" height="8" fill="#0E5EAE"/>
-      <rect x="14" y="38" width="16" height="6" rx="2" fill="#fff" fill-opacity=".85"/>
-    </symbol>
-    <symbol id="coin" viewBox="0 0 64 64">
-      <circle cx="32" cy="32" r="22" fill="#FACE13"/>
-      <circle cx="32" cy="32" r="14" fill="none" stroke="#fff" stroke-width="3" stroke-opacity=".75"/>
-    </symbol>
-    <symbol id="hex" viewBox="0 0 64 64">
-      <path fill="#1B86EE" d="M32 6 54 18.5v27L32 58 10 45.5v-27Z"/>
-      <path fill="#fff" fill-opacity=".55" d="M32 16 44 23v14L32 44 20 37V23Z"/>
-    </symbol>
   </svg>
   <main class="app" id="app">
     <div class="top">
@@ -392,7 +393,17 @@
         <button type="button" data-product="stars" class="on">Звёзды</button>
         <button type="button" data-product="premium">Premium</button>
       </div>
-      <button type="button" id="theme" aria-label="Сменить тему">☾</button>
+      <button type="button" id="theme" aria-label="Включить светлую тему">
+        <svg class="sun" viewBox="0 0 24 24" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <circle cx="12" cy="12" r="3.5"/>
+            <path d="M12 3.1v2M12 18.9v2M3.1 12h2M18.9 12h2M5.7 5.7l1.4 1.4M16.9 16.9l1.4 1.4M18.3 5.7l-1.4 1.4M7.1 16.9l-1.4 1.4"/>
+          </g>
+        </svg>
+        <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M14.6 3.2a7.2 7.2 0 1 0 5.7 11.7A5.9 5.9 0 0 1 14.6 3.2z"/>
+        </svg>
+      </button>
     </div>
     <header class="hero">
       <div class="badge" id="badge"></div>
@@ -417,16 +428,31 @@
       <p class="summary" id="summary"></p>
       <p class="label">Банковская карта</p>
       <button type="button" class="method" data-pay="card">
-        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#card"></use></svg>
-        <span><span class="name">Банковская карта</span><span class="sub">Visa, Mastercard, МИР</span></span>
+        <svg class="ico card" viewBox="0 0 72 46" aria-hidden="true">
+          <defs>
+            <linearGradient id="cardSheen" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#2c2c30"/>
+              <stop offset="0.42" stop-color="#101012"/>
+              <stop offset="1" stop-color="#000"/>
+            </linearGradient>
+          </defs>
+          <rect x="1.2" y="1.2" width="69.6" height="43.6" rx="7" fill="url(#cardSheen)" stroke="#e6e6ea" stroke-width="1.6"/>
+          <rect x="8" y="14" width="14" height="11" rx="2" fill="#f3ead4"/>
+          <path d="M8 17.6h14M11.5 14v11M15.2 14v11" stroke="#8a8376" stroke-width="0.8"/>
+          <circle cx="57.5" cy="30" r="6.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+          <circle cx="50.4" cy="30" r="6.4" fill="none" stroke="#bdbdc2" stroke-width="1.5"/>
+        </svg>
+        <span><span class="name">Банковская карта</span><span class="sub">Visa · только из Украины</span></span>
       </button>
       <p class="label">Криптой</p>
       <button type="button" class="method" data-pay="cryptobot">
-        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#coin"></use></svg>
-        <span><span class="name">Crypto Bot</span><span class="sub">Оплата в криптоботе</span></span>
+        <img class="ico" alt="" src="data:image/png;base64,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">
+        <span><span class="name">Crypto Bot</span><span class="sub">Оплата в @CryptoBot</span></span>
       </button>
       <button type="button" class="method" data-pay="heleket">
-        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#hex"></use></svg>
+        <svg class="ico heleket" viewBox="0 0 28 32" aria-hidden="true">
+          <path fill="#F21818" d="M0 22L10 27L6.5 22.5L10.5 11.5H16.5L20.5 23L16.5 27L12 31.5L27.5 24L19 0L16.5 6.5H11L8 0L0 22Z"/>
+        </svg>
         <span><span class="name">Heleket</span><span class="sub">Оплата криптой</span></span>
       </button>
       <p class="note" id="paynote"></p>
@@ -459,7 +485,7 @@
     const tg = window.Telegram && window.Telegram.WebApp;
     const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
 
-    const THEME_KEY = "shop-theme";
+    const THEME_KEY = "shop-bg";
     const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
 
     function paintChrome(color) {
@@ -477,9 +503,7 @@
       const dark = theme === "dark";
       document.documentElement.dataset.theme = dark ? "dark" : "light";
       document.documentElement.style.colorScheme = dark ? "dark" : "light";
-      const themeButton = document.getElementById("theme");
-      themeButton.textContent = dark ? "☀" : "☾";
-      themeButton.setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
+      document.getElementById("theme").setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
       paintChrome(dark ? "#000000" : "#FFFAF6");
       try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (error) {}
     }
@@ -488,8 +512,8 @@
       tg.ready();
       tg.expand();
     }
-    let savedTheme = "light";
-    try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch (error) {}
+    let savedTheme = "dark";
+    try { savedTheme = localStorage.getItem(THEME_KEY) || "dark"; } catch (error) {}
     applyTheme(savedTheme);
 
     const title = document.getElementById("title");
@@ -780,10 +804,15 @@
       paintSelection();
       updatePay();
     });
+    const topBar = document.querySelector(".top");
+    const hero = document.querySelector(".hero");
+
     function showShop() {
       paywall.hidden = true;
       stage.hidden = false;
       checkout.hidden = false;
+      topBar.hidden = false;
+      hero.hidden = false;
       paynote.textContent = "";
       paynote.classList.remove("show");
       paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
@@ -798,6 +827,8 @@
       paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
       stage.hidden = true;
       checkout.hidden = true;
+      topBar.hidden = true;
+      hero.hidden = true;
       paywall.hidden = false;
       burst();
     });
