@@ -15,8 +15,10 @@ class MemoryApi:
         self.sent = []
         self.answered = []
 
-    def send_message(self, chat_id, text, buttons=None):
-        self.sent.append({"chat_id": chat_id, "text": text, "buttons": buttons})
+    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None):
+        self.sent.append(
+            {"chat_id": chat_id, "text": text, "buttons": buttons, "keyboard": keyboard, "placeholder": placeholder}
+        )
 
     def answer_callback(self, callback_id):
         self.answered.append(callback_id)
@@ -56,68 +58,81 @@ class BotTests(unittest.TestCase):
     def test_start_shows_stars_and_premium(self):
         self.bot.handle(_message(10, "/start"))
         sent = self.api.sent[-1]
-        labels = [button[0] for row in sent["buttons"] for button in row]
-        self.assertEqual(labels, ["Купить звезды", "Телеграм премиум"])
-        self.assertEqual([button[1] for row in sent["buttons"] for button in row], ["k:stars", "k:premium"])
+        self.assertEqual(
+            sent["keyboard"],
+            [
+                ["⭐ Купить Звёзды"],
+                ["☆ Купить Premium", "🧸 Купить Подарки"],
+                ["👥 Рефералы", "💎 Купить TON"],
+            ],
+        )
+        self.assertIsNone(sent["buttons"])
 
     def test_stars_for_self_then_quantity_stops(self):
-        self.bot.handle(_callback(20, "alexdev", "k:stars"))
+        self.bot.handle(_message(20, "⭐ Купить Звёзды", username="alexdev"))
         screen = self.api.sent[-1]
-        self.assertIn("Минимальный заказ от 50 звёзд.", screen["text"])
         self.assertEqual(
-            [(button[0], button[1]) for button in screen["buttons"][0]],
-            [("Себе", "w:self:stars"), ("Другу", "w:friend:stars")],
+            screen["text"],
+            "🚀 Введите количество звёзд для покупки (от 50 ⭐ до 1000000 ⭐)\n\n👤 Получатель: @alexdev",
         )
-
-        self.bot.handle(_callback(20, "AlexDev", "w:self:stars"))
-        self.assertIn("Сколько звёзд отправить @alexdev?", self.api.sent[-1]["text"])
+        self.assertEqual(screen["keyboard"], [["🎁 Подарить звёзды"]])
 
         self.bot.handle(_message(20, "40", username="alexdev"))
-        self.assertIn("Минимальный заказ от 50", self.api.sent[-1]["text"])
+        self.assertIn("от 50 ⭐ до 1000000 ⭐", self.api.sent[-1]["text"])
 
         self.bot.handle(_message(20, "50", username="alexdev"))
-        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: 50 звёзд для @alexdev.")
-        self.assertIsNone(self.api.sent[-1]["buttons"])
+        done = self.api.sent[-1]
+        self.assertEqual(
+            done["text"],
+            "⭐ Оплатите указ Сегодня эличество\nзвёзд\n\n☆ Количество: 50 ⭐\n👤 Получатель: @alexdev",
+        )
+        self.assertIsNone(done["buttons"])
+        self._assert_payment_is_left_out(done["text"])
 
     def test_stars_for_friend_asks_for_a_nick(self):
-        self.bot.handle(_callback(20, "alexdev", "k:stars"))
-        self.bot.handle(_callback(20, "alexdev", "w:friend:stars"))
+        self.bot.handle(_message(20, "⭐ Купить Звёзды", username="alexdev"))
+        self.bot.handle(_message(20, "🎁 Подарить звёзды", username="alexdev"))
         self.assertEqual(self.api.sent[-1]["text"], "Напишите ник друга.")
         self.bot.handle(_message(20, "@Friend_Name", username="alexdev"))
-        self.assertIn("@friend_name", self.api.sent[-1]["text"])
+        self.assertIn("👤 Получатель: @friend_name", self.api.sent[-1]["text"])
         self.bot.handle(_message(20, "100", username="alexdev"))
-        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: 100 звёзд для @friend_name.")
+        done = self.api.sent[-1]
+        self.assertIn("☆ Количество: 100 ⭐", done["text"])
+        self.assertIn("👤 Получатель: @friend_name", done["text"])
+        self._assert_payment_is_left_out(done["text"])
 
     def test_premium_repeats_the_same_steps(self):
-        self.bot.handle(_callback(20, "alexdev", "k:premium"))
+        self.bot.handle(_message(20, "☆ Купить Premium", username="alexdev"))
         screen = self.api.sent[-1]
         self.assertIn("3, 6 или 12 месяцев", screen["text"])
-        self.assertEqual(
-            [(button[0], button[1]) for button in screen["buttons"][0]],
-            [("Себе", "w:self:premium"), ("Другу", "w:friend:premium")],
-        )
+        self.assertIn("👤 Получатель: @alexdev", screen["text"])
+        self.assertEqual(screen["keyboard"][0], ["3 месяца", "6 месяцев", "12 месяцев"])
+        self.assertEqual(screen["keyboard"][1], ["🎁 Подарить Premium"])
 
-        self.bot.handle(_callback(20, "alexdev", "w:friend:premium"))
+        self.bot.handle(_message(20, "🎁 Подарить Premium", username="alexdev"))
         self.bot.handle(_message(20, "buddy", username="alexdev"))
-        months = self.api.sent[-1]
-        self.assertIn("@buddy", months["text"])
-        self.assertEqual(
-            [button[0] for button in months["buttons"][0]],
-            ["3 месяца", "6 месяцев", "12 месяцев"],
-        )
-        self.bot.handle(_callback(20, "alexdev", "q:6"))
-        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: Premium на 6 мес. для @buddy.")
+        self.assertIn("👤 Получатель: @buddy", self.api.sent[-1]["text"])
+        self.bot.handle(_message(20, "6 месяцев", username="alexdev"))
+        done = self.api.sent[-1]
+        self.assertEqual(done["text"], "☆ Срок: 6 мес.\n👤 Получатель: @buddy")
+        self._assert_payment_is_left_out(done["text"])
 
-        self.bot.handle(_callback(20, "alexdev", "w:self:premium"))
-        self.bot.handle(_callback(20, "alexdev", "q:12"))
-        self.assertEqual(self.api.sent[-1]["text"], "Выбрано: Premium на 12 мес. для @alexdev.")
+        self.bot.handle(_message(20, "☆ Купить Premium", username="alexdev"))
+        self.bot.handle(_message(20, "12", username="alexdev"))
+        self.assertEqual(self.api.sent[-1]["text"], "☆ Срок: 12 мес.\n👤 Получатель: @alexdev")
 
     def test_self_without_username_asks_to_type_one(self):
-        self.bot.handle(_callback(20, None, "k:stars"))
-        self.bot.handle(_callback(20, None, "w:self:stars"))
+        self.bot.handle(_message(20, "⭐ Купить Звёзды", username=None))
         self.assertIn("Напишите свой ник", self.api.sent[-1]["text"])
         self.bot.handle(_message(20, "ownnick", username=None))
-        self.assertIn("@ownnick", self.api.sent[-1]["text"])
+        self.assertIn("👤 Получатель: @ownnick", self.api.sent[-1]["text"])
+
+    def _assert_payment_is_left_out(self, text: str) -> None:
+        lowered = text.lower()
+        self.assertNotIn("соглашаетесь", lowered)
+        self.assertNotIn("сбп", lowered)
+        self.assertNotIn("вывод", lowered)
+        self.assertNotIn("способ оплаты", lowered)
 
     def _order_is_not_created(self, *args, **kwargs):
         raise AssertionError("заказ создавать пока не нужно")

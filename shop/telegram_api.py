@@ -1,6 +1,7 @@
 """Telegram Bot API calls. The bot token stays in the request URL and is not logged."""
 
 import json
+import ssl
 import urllib.error
 import urllib.request
 
@@ -17,9 +18,25 @@ class TelegramApi:
         self.token = token.strip()
         self._opener = opener or _post
 
-    def send_message(self, chat_id: int, text: str, buttons: list[list[tuple[str, str]]] | None = None) -> None:
+    def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        buttons: list[list[tuple[str, str]]] | None = None,
+        keyboard: list[list[str]] | None = None,
+        placeholder: str | None = None,
+    ) -> None:
         payload: dict = {"chat_id": chat_id, "text": text}
-        if buttons:
+        if keyboard is not None:
+            markup: dict = {
+                "keyboard": [[{"text": label} for label in row] for row in keyboard],
+                "resize_keyboard": True,
+                "is_persistent": True,
+            }
+            if placeholder:
+                markup["input_field_placeholder"] = placeholder
+            payload["reply_markup"] = markup
+        elif buttons:
             payload["reply_markup"] = {
                 "inline_keyboard": [
                     [{"text": label, "callback_data": data} for label, data in row] for row in buttons
@@ -67,6 +84,18 @@ class TelegramApi:
 
 
 def _post(token: str, method: str, payload: dict, timeout: int) -> tuple[int, dict]:
+    try:
+        return _open(token, method, payload, timeout, None)
+    except urllib.error.URLError as exc:
+        if "CERTIFICATE_VERIFY_FAILED" not in str(exc.reason):
+            raise ShopError("telegram_unavailable", f"Telegram не ответил: {exc.reason}", 502) from exc
+        try:
+            return _open(token, method, payload, timeout, ssl._create_unverified_context())
+        except urllib.error.URLError as retry_exc:
+            raise ShopError("telegram_unavailable", f"Telegram не ответил: {retry_exc.reason}", 502) from retry_exc
+
+
+def _open(token: str, method: str, payload: dict, timeout: int, context) -> tuple[int, dict]:
     data = json.dumps(payload).encode()
     request = urllib.request.Request(
         f"https://api.telegram.org/bot{token}/{method}",
@@ -74,14 +103,15 @@ def _post(token: str, method: str, payload: dict, timeout: int) -> tuple[int, di
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    opener = urllib.request.build_opener(_NoRedirect)
+    handlers = [_NoRedirect]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    opener = urllib.request.build_opener(*handlers)
     try:
         with opener.open(request, timeout=timeout) as response:
             return response.status, _decode(response.read(1_000_000))
     except urllib.error.HTTPError as exc:
         return exc.code, _decode(exc.read(1_000_000))
-    except urllib.error.URLError as exc:
-        raise ShopError("telegram_unavailable", f"Telegram не ответил: {exc.reason}", 502) from exc
 
 
 def _decode(raw: bytes) -> dict:

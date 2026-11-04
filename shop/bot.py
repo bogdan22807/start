@@ -1,4 +1,4 @@
-"""Telegram shop bot. The start screen asks who receives Stars or Premium, then stops."""
+"""Telegram shop bot. The menu matches the reference screen and stops before payment."""
 
 import os
 import time
@@ -15,6 +15,21 @@ from shop.username import normalize_username
 _STAR_MIN = 50
 _STAR_MAX = 1_000_000
 _PREMIUM_MONTHS = (3, 6, 12)
+
+BUY_STARS = "⭐ Купить Звёзды"
+BUY_PREMIUM = "☆ Купить Premium"
+BUY_GIFTS = "🧸 Купить Подарки"
+REFERRALS = "👥 Рефералы"
+BUY_TON = "💎 Купить TON"
+GIFT_STARS = "🎁 Подарить звёзды"
+GIFT_PREMIUM = "🎁 Подарить Premium"
+
+_MENU = [
+    [BUY_STARS],
+    [BUY_PREMIUM, BUY_GIFTS],
+    [REFERRALS, BUY_TON],
+]
+_MONTH_LABELS = {3: "3 месяца", 6: "6 месяцев", 12: "12 месяцев"}
 
 
 @dataclass
@@ -46,23 +61,39 @@ class ShopBot:
         command, rest = _command(text)
         if command in {"/start", "/catalog"}:
             self.drafts.pop(chat_id, None)
-            self._show_start(chat_id)
+            self._show_menu(chat_id)
             return
         if command == "/id":
-            self.api.send_message(chat_id, f"Ваш Telegram id: {user_id}")
+            self.api.send_message(chat_id, f"Ваш Telegram id: {user_id}", keyboard=_MENU)
             return
         if command == "/cancel":
             self.drafts.pop(chat_id, None)
-            self.api.send_message(chat_id, "Выбор отменён. Нажмите /start, чтобы открыть меню.")
+            self._show_menu(chat_id, "Выбор отменён.")
             return
         if command == "/paid":
             self._confirm(chat_id, user_id, rest)
+            return
+        if text == BUY_STARS:
+            self._open_stars(chat_id, user.get("username"))
+            return
+        if text == BUY_PREMIUM:
+            self._open_premium(chat_id, user.get("username"))
+            return
+        if text in {BUY_GIFTS, REFERRALS, BUY_TON}:
+            self.drafts.pop(chat_id, None)
+            self._show_menu(chat_id, "Этот раздел пока не открыт.")
+            return
+        if text == GIFT_STARS:
+            self._ask_friend(chat_id, "stars")
+            return
+        if text == GIFT_PREMIUM:
+            self._ask_friend(chat_id, "premium")
             return
         draft = self.drafts.get(chat_id)
         if draft is not None and not command:
             self._on_text(chat_id, draft, text)
             return
-        self._show_start(chat_id)
+        self._show_menu(chat_id)
 
     def run(self) -> None:
         offset = None
@@ -89,63 +120,39 @@ class ShopBot:
         if "id" not in chat:
             return
         chat_id = int(chat["id"])
-        user = query.get("from") or {}
         data = query.get("data") or ""
-        if data == "k:stars":
-            self._ask_who(chat_id, "stars")
-            return
-        if data == "k:premium":
-            self._ask_who(chat_id, "premium")
-            return
-        if data.startswith("w:"):
-            _prefix, who, kind = data.split(":", 2)
-            self._choose_who(chat_id, kind, who, user.get("username"))
-            return
         if data.startswith("q:"):
             self._choose_months(chat_id, data[2:])
 
-    def _show_start(self, chat_id: int) -> None:
-        self.api.send_message(
-            chat_id,
-            "Выберите, что купить.",
-            [[("Купить звезды", "k:stars")], [("Телеграм премиум", "k:premium")]],
-        )
+    def _show_menu(self, chat_id: int, text: str = "Выберите действие:") -> None:
+        self.api.send_message(chat_id, text, keyboard=_MENU)
 
-    def _ask_who(self, chat_id: int, kind: str) -> None:
-        self.drafts[chat_id] = Draft(kind=kind, step="who")
-        if kind == "stars":
-            text = "Минимальный заказ от 50 звёзд."
-        else:
-            text = "Telegram Premium на 3, 6 или 12 месяцев."
-        self.api.send_message(
-            chat_id,
-            text,
-            [[("Себе", f"w:self:{kind}"), ("Другу", f"w:friend:{kind}")]],
-        )
+    def _open_stars(self, chat_id: int, own_username: object) -> None:
+        self._open_for_self(chat_id, "stars", own_username)
 
-    def _choose_who(self, chat_id: int, kind: str, who: str, own_username: object) -> None:
-        if kind not in {"stars", "premium"} or who not in {"self", "friend"}:
-            self._show_start(chat_id)
-            return
-        if who == "friend":
-            self.drafts[chat_id] = Draft(kind=kind, step="nick")
-            self.api.send_message(chat_id, "Напишите ник друга.")
-            return
+    def _open_premium(self, chat_id: int, own_username: object) -> None:
+        self._open_for_self(chat_id, "premium", own_username)
+
+    def _open_for_self(self, chat_id: int, kind: str, own_username: object) -> None:
         username = own_username if isinstance(own_username, str) else ""
         try:
             recipient = normalize_username(username)
         except ShopError:
             self.drafts[chat_id] = Draft(kind=kind, step="nick")
-            self.api.send_message(chat_id, "У аккаунта нет username. Напишите свой ник.")
+            self.api.send_message(chat_id, "У аккаунта нет username. Напишите свой ник.", keyboard=_MENU)
             return
         self._ask_amount(chat_id, kind, recipient)
 
+    def _ask_friend(self, chat_id: int, kind: str) -> None:
+        self.drafts[chat_id] = Draft(kind=kind, step="gift")
+        self.api.send_message(chat_id, "Напишите ник друга.", keyboard=_gift_keyboard(kind))
+
     def _on_text(self, chat_id: int, draft: Draft, text: str) -> None:
-        if draft.step == "nick":
+        if draft.step in {"nick", "gift"}:
             try:
                 recipient = normalize_username(text)
             except ShopError as exc:
-                self.api.send_message(chat_id, exc.message)
+                self.api.send_message(chat_id, exc.message, keyboard=_gift_keyboard(draft.kind) if draft.step == "gift" else _MENU)
                 return
             self._ask_amount(chat_id, draft.kind, recipient)
             return
@@ -158,42 +165,66 @@ class ShopBot:
     def _ask_amount(self, chat_id: int, kind: str, recipient: str) -> None:
         self.drafts[chat_id] = Draft(kind=kind, step="quantity", recipient=recipient)
         if kind == "stars":
-            self.api.send_message(chat_id, f"Сколько звёзд отправить @{recipient}? Минимум 50.")
+            self.api.send_message(
+                chat_id,
+                f"🚀 Введите количество звёзд для покупки (от 50 ⭐ до 1000000 ⭐)\n\n👤 Получатель: @{recipient}",
+                keyboard=_gift_keyboard(kind),
+                placeholder="Введите количество",
+            )
             return
         self.api.send_message(
             chat_id,
-            f"Выберите срок Premium для @{recipient}.",
-            [[("3 месяца", "q:3"), ("6 месяцев", "q:6"), ("12 месяцев", "q:12")]],
+            f"🚀 Выберите срок Premium: 3, 6 или 12 месяцев\n\n👤 Получатель: @{recipient}",
+            keyboard=[list(_MONTH_LABELS.values()), [GIFT_PREMIUM]],
         )
 
     def _finish_stars(self, chat_id: int, draft: Draft, text: str) -> None:
         try:
-            amount = int(text.strip())
+            amount = int(text.strip().replace(" ", ""))
         except ValueError:
             amount = 0
         if amount < _STAR_MIN or amount > _STAR_MAX:
-            self.api.send_message(chat_id, "Минимальный заказ от 50 звёзд. Напишите число.")
+            self.api.send_message(
+                chat_id,
+                f"🚀 Введите количество звёзд для покупки (от 50 ⭐ до 1000000 ⭐)\n\n👤 Получатель: @{draft.recipient}",
+                keyboard=_gift_keyboard("stars"),
+                placeholder="Введите количество",
+            )
             return
         self.drafts.pop(chat_id, None)
-        self.api.send_message(chat_id, f"Выбрано: {amount} звёзд для @{draft.recipient}.")
+        self.api.send_message(
+            chat_id,
+            (
+                "⭐ Оплатите указ Сегодня эличество\n"
+                "звёзд\n\n"
+                f"☆ Количество: {amount} ⭐\n"
+                f"👤 Получатель: @{draft.recipient}"
+            ),
+            keyboard=_MENU,
+        )
 
     def _choose_months(self, chat_id: int, raw: str) -> None:
         draft = self.drafts.get(chat_id)
         if draft is None or draft.step != "quantity" or draft.kind != "premium":
-            self._show_start(chat_id)
+            self._show_menu(chat_id)
             return
         self._finish_premium(chat_id, draft, raw)
 
     def _finish_premium(self, chat_id: int, draft: Draft, text: str) -> None:
-        try:
-            months = int(text.strip())
-        except ValueError:
-            months = 0
+        months = _months(text)
         if months not in _PREMIUM_MONTHS:
-            self.api.send_message(chat_id, "Для Premium доступны 3, 6 или 12 месяцев.")
+            self.api.send_message(
+                chat_id,
+                f"🚀 Выберите срок Premium: 3, 6 или 12 месяцев\n\n👤 Получатель: @{draft.recipient}",
+                keyboard=[list(_MONTH_LABELS.values()), [GIFT_PREMIUM]],
+            )
             return
         self.drafts.pop(chat_id, None)
-        self.api.send_message(chat_id, f"Выбрано: Premium на {months} мес. для @{draft.recipient}.")
+        self.api.send_message(
+            chat_id,
+            f"☆ Срок: {months} мес.\n👤 Получатель: @{draft.recipient}",
+            keyboard=_MENU,
+        )
 
     def _confirm(self, chat_id: int, user_id: int, rest: str) -> None:
         if user_id not in self.admin_ids:
@@ -256,6 +287,22 @@ def main() -> None:
         bot.run()
     finally:
         shop.store.close()
+
+
+def _gift_keyboard(kind: str) -> list[list[str]]:
+    if kind == "premium":
+        return [[GIFT_PREMIUM]]
+    return [[GIFT_STARS]]
+
+
+def _months(text: str) -> int:
+    digits = "".join(char for char in text if char.isdigit())
+    if not digits:
+        return 0
+    try:
+        return int(digits)
+    except ValueError:
+        return 0
 
 
 def _command(text: str) -> tuple[str, str]:
