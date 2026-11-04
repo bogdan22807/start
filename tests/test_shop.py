@@ -280,6 +280,15 @@ class HttpTests(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read().decode())
 
+    def test_mini_app_page_is_served(self):
+        request = urllib.request.Request(self.base + "/app")
+        with urllib.request.urlopen(request) as response:
+            body = response.read().decode()
+            self.assertEqual(response.status, 200)
+            self.assertIn("text/html", response.headers.get("Content-Type", ""))
+        self.assertIn("Telegram Stars", body)
+        self.assertIn("К оплате", body)
+
     def test_http_dry_run_purchase(self):
         status, health = self.request("GET", "/health")
         self.assertEqual(status, 200)

@@ -1,8 +1,11 @@
 """Telegram shop bot. The menu matches the reference screen and stops before payment."""
 
+import json
 import os
+import threading
 import time
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 
 from shop.config import load_shop
 from shop.errors import ShopError
@@ -43,11 +46,17 @@ class Draft:
     recipient: str | None = None
 
 
+_DEFAULT_APP = "https://cdn.jsdelivr.net/gh/bogdan22807/start@main/shop/webapp/index.html"
+_STAR_PACKS = {50: "0.94", 100: "1.88", 250: "4.69", 500: "9.38", 1000: "18.75", 2500: "46.88"}
+_APP_PREMIUM = {3: "14.99", 6: "19.99", 12: "36.24"}
+
+
 class ShopBot:
-    def __init__(self, shop: Shop, api, admin_ids: set[int]):
+    def __init__(self, shop: Shop, api, admin_ids: set[int], app_url: str = ""):
         self.shop = shop
         self.api = api
         self.admin_ids = admin_ids
+        self.app_url = app_url
         self.drafts: dict[int, Draft] = {}
 
     def handle(self, update: dict) -> None:
@@ -55,11 +64,17 @@ class ShopBot:
             self._on_callback(update["callback_query"])
             return
         message = update.get("message") or {}
-        text = message.get("text") or ""
         chat = message.get("chat") or {}
-        if not text or "id" not in chat:
+        if "id" not in chat:
             return
         chat_id = int(chat["id"])
+        web_app = message.get("web_app_data") or {}
+        if isinstance(web_app.get("data"), str):
+            self._on_app(chat_id, web_app["data"])
+            return
+        text = message.get("text") or ""
+        if not text:
+            return
         user = message.get("from") or {}
         user_id = int(user["id"]) if "id" in user else chat_id
         command, rest = _command(text)
@@ -136,6 +151,21 @@ class ShopBot:
             self._choose_months(chat_id, data[2:])
 
     def _show_menu(self, chat_id: int, text: str = "Выберите действие:") -> None:
+        if self.app_url:
+            shown = "Магазин звёзд и Premium." if text == "Выберите действие:" else text
+            self.api.send_message(chat_id, shown, app_button=("Открыть магазин", self.app_url))
+            return
+        self.api.send_message(chat_id, text, keyboard=_MENU)
+
+    def _on_app(self, chat_id: int, raw: str) -> None:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = None
+        text = _app_summary(payload)
+        if self.app_url:
+            self.api.send_message(chat_id, text, app_button=("Открыть магазин", self.app_url))
+            return
         self.api.send_message(chat_id, text, keyboard=_MENU)
 
     def _open_stars(self, chat_id: int, own_username: object) -> None:
@@ -320,17 +350,76 @@ def main() -> None:
         print("TELEGRAM_ADMIN_IDS пуст. Напишите боту /id и подставьте этот номер, иначе оплату некому подтвердить.")
     shop = load_shop(OrderStore(os.environ.get("SHOP_DB", "data/orders.db")))
     api = TelegramApi(token)
+    app_url = webapp_url()
+    _start_app_server(shop)
     try:
         api.delete_webhook()
         api.set_commands()
+        if app_url:
+            api.set_menu_button(app_url)
     except ShopError as exc:
         print(f"telegram setup: {exc.message}")
-    bot = ShopBot(shop, api, admin_ids)
+    bot = ShopBot(shop, api, admin_ids, app_url)
     print("telegram bot polling")
     try:
         bot.run()
     finally:
         shop.store.close()
+
+
+def webapp_url() -> str:
+    value = os.environ.get("WEBAPP_URL", "").strip()
+    return value or _DEFAULT_APP
+
+
+def _start_app_server(shop: Shop) -> None:
+    from shop.server import make_server
+
+    host = os.environ.get("SHOP_HOST", "0.0.0.0")
+    port = int(os.environ.get("SHOP_PORT", "8000"))
+    try:
+        server = make_server(host, port, shop)
+    except OSError as exc:
+        print(f"mini app server: {exc}")
+        return
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"mini app http://127.0.0.1:{port}/app")
+
+
+def _app_summary(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return "Не получилось прочитать выбор."
+    try:
+        recipient = normalize_username(payload.get("recipient"))
+    except ShopError as exc:
+        return exc.message
+    kind = payload.get("kind")
+    if kind == "stars":
+        try:
+            amount = int(payload.get("amount"))
+        except (TypeError, ValueError):
+            amount = 0
+        if amount < _STAR_MIN or amount > 100_000:
+            return "Для звёзд нужно число от 50 до 100 000."
+        return f"{amount} звёзд для @{recipient}.\nК оплате {_star_total(amount)} USDT."
+    if kind == "premium":
+        try:
+            months = int(payload.get("months"))
+        except (TypeError, ValueError):
+            months = 0
+        total = _APP_PREMIUM.get(months)
+        if total is None:
+            return "Для Premium доступны 3, 6 или 12 месяцев."
+        return f"Premium на {months} мес. для @{recipient}.\nК оплате {total} USDT."
+    return "Неизвестный выбор."
+
+
+def _star_total(amount: int) -> str:
+    known = _STAR_PACKS.get(amount)
+    if known:
+        return known
+    cents = (Decimal(amount) * Decimal("1.875")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return f"{Decimal(cents) / Decimal(100):.2f}"
 
 
 def _gift_keyboard(kind: str) -> list[list[str]]:

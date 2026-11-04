@@ -4,7 +4,10 @@ import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
+
+_WEB_ROOT = (Path(__file__).parent / "webapp").resolve()
 
 from shop.config import load_shop
 from shop.errors import ShopError
@@ -20,6 +23,10 @@ class ShopHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        page = _web_page(path)
+        if page is not None:
+            self._send_file(page)
+            return
         try:
             if path == "/health":
                 self._send(
@@ -110,6 +117,16 @@ class ShopHandler(BaseHTTPRequestHandler):
             raise ShopError("bad_request", "JSON должен быть объектом.", 400)
         return body
 
+    def _send_file(self, path: Path) -> None:
+        data = path.read_bytes()
+        kind = "text/html; charset=utf-8" if path.suffix == ".html" else "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
     def _send(self, status: int, body: dict) -> None:
         data = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
@@ -117,6 +134,21 @@ class ShopHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+
+def _web_page(path: str) -> Path | None:
+    if path in {"/app", "/app/"}:
+        relative = "index.html"
+    elif path.startswith("/app/"):
+        relative = path[len("/app/") :]
+    else:
+        return None
+    target = (_WEB_ROOT / relative).resolve()
+    if target != _WEB_ROOT and _WEB_ROOT not in target.parents:
+        return None
+    if target.is_file():
+        return target
+    return None
 
 
 def _order_id(path: str) -> str | None:

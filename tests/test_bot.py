@@ -15,9 +15,16 @@ class MemoryApi:
         self.sent = []
         self.answered = []
 
-    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None):
+    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None, app_button=None):
         self.sent.append(
-            {"chat_id": chat_id, "text": text, "buttons": buttons, "keyboard": keyboard, "placeholder": placeholder}
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "buttons": buttons,
+                "keyboard": keyboard,
+                "placeholder": placeholder,
+                "app_button": app_button,
+            }
         )
 
     def answer_callback(self, callback_id):
@@ -143,6 +150,42 @@ class BotTests(unittest.TestCase):
         self.assertIn("Напишите свой ник", self.api.sent[-1]["text"])
         self.bot.handle(_message(20, "ownnick", username=None))
         self.assertIn("👤 Получатель: @ownnick", self.api.sent[-1]["text"])
+
+    def test_web_app_choice_is_not_an_order(self):
+        self.bot.app_url = "https://example.com/app"
+        self.bot.handle(_message(10, "/start"))
+        self.assertEqual(self.api.sent[-1]["app_button"], ("Открыть магазин", "https://example.com/app"))
+        self.bot.handle(
+            {
+                "message": {
+                    "chat": {"id": 10, "type": "private"},
+                    "from": {"id": 10, "username": "alexdev"},
+                    "web_app_data": {"data": '{"kind":"stars","recipient":"alexdev","amount":1000,"total":"18.75"}'},
+                }
+            }
+        )
+        done = self.api.sent[-1]
+        self.assertEqual(done["text"], "1000 звёзд для @alexdev.\nК оплате 18.75 USDT.")
+        self._assert_payment_is_left_out(done["text"])
+        self.bot.handle(
+            {
+                "message": {
+                    "chat": {"id": 10, "type": "private"},
+                    "from": {"id": 10},
+                    "web_app_data": {"data": '{"kind":"premium","recipient":"buddy","months":12,"total":"1.00"}'},
+                }
+            }
+        )
+        self.assertEqual(self.api.sent[-1]["text"], "Premium на 12 мес. для @buddy.\nК оплате 36.24 USDT.")
+
+    def test_mini_app_stays_black_and_white(self):
+        page = Path(__file__).parents[1].joinpath("shop/webapp/index.html").read_text(encoding="utf-8")
+        self.assertIn("18.75", page)
+        self.assertIn("36.24", page)
+        self.assertIn("14.99", page)
+        self.assertNotIn("#2f6", page.lower())
+        self.assertNotIn("blue", page.lower())
+        self.assertNotIn("rgb(", page.lower())
 
     def _assert_payment_is_left_out(self, text: str) -> None:
         lowered = text.lower()

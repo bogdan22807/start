@@ -25,9 +25,17 @@ class TelegramApi:
         buttons: list[list[tuple[str, str]]] | None = None,
         keyboard: list[list[str]] | None = None,
         placeholder: str | None = None,
+        app_button: tuple[str, str] | None = None,
     ) -> None:
         payload: dict = {"chat_id": chat_id, "text": text}
-        if keyboard is not None:
+        if app_button is not None:
+            label, url = app_button
+            payload["reply_markup"] = {
+                "keyboard": [[{"text": label, "web_app": {"url": url}}]],
+                "resize_keyboard": True,
+                "is_persistent": True,
+            }
+        elif keyboard is not None:
             markup: dict = {
                 "keyboard": [[{"text": label} for label in row] for row in keyboard],
                 "resize_keyboard": True,
@@ -58,6 +66,12 @@ class TelegramApi:
 
     def delete_webhook(self) -> None:
         self._call("deleteWebhook", {"drop_pending_updates": False})
+
+    def set_menu_button(self, url: str) -> None:
+        self._call(
+            "setChatMenuButton",
+            {"menu_button": {"type": "web_app", "text": "Магазин", "web_app": {"url": url}}},
+        )
 
     def set_commands(self) -> None:
         self._call(
