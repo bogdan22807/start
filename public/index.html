@@ -50,13 +50,11 @@
     .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .app {
       width: min(100%, 440px);
-      height: 100dvh;
-      max-height: 100dvh;
+      min-height: 100dvh;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      padding: 10px 16px 0;
+      padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
       background:
         radial-gradient(140px 90px at 16% 78px, rgba(250, 206, 19, 0.22), transparent 72%),
         var(--bg);
@@ -249,19 +247,13 @@
     .custom { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
     [hidden] { display: none !important; }
     .sheet {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      padding-bottom: 8px;
+      flex: 0 0 auto;
     }
-    #paywall { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     .checkout {
       position: relative;
       flex: none;
-      margin: 0 -16px 0;
-      padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
-      background: var(--bg);
+      margin-top: 14px;
+      background: transparent;
     }
     .due {
       display: flex;
@@ -772,11 +764,10 @@
     }
 
     function keepVisible(node) {
-      const sheet = document.getElementById("sheet");
       const box = node.getBoundingClientRect();
-      const frame = sheet.getBoundingClientRect();
-      if (box.bottom > frame.bottom - 6) sheet.scrollTop += box.bottom - frame.bottom + 12;
-      else if (box.top < frame.top + 6) sheet.scrollTop -= frame.top - box.top + 8;
+      const pay = document.getElementById("pay").getBoundingClientRect();
+      if (box.bottom > pay.top - 8) window.scrollBy(0, box.bottom - pay.top + 16);
+      else if (box.top < 8) window.scrollBy(0, box.top - 8);
     }
 
     function paintSelection() {
