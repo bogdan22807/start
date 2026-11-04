@@ -1,4 +1,4 @@
-"""Telegram shop bot. /start points at the menu button and does not add a chat button."""
+"""Telegram shop bot. /start greets the buyer and links the working shop."""
 
 import os
 import time
@@ -7,11 +7,17 @@ from shop.errors import ShopError
 from shop.telegram_api import TelegramApi
 from shop.tokens import telegram_bot_token
 
-WELCOME = (
-    "Привет! Это магазин Telegram Stars и Premium.\n\n"
-    "Откройте его кнопкой «Магазин» слева от поля сообщения."
-)
+BUY_STARS = "Купить звезды"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
+
+
+def welcome_text(name: str) -> str:
+    shown = name.strip() or "друг"
+    return (
+        f"🌟 Добро пожаловать, {shown}\n\n"
+        "Здесь вы можете быстро и выгодно приобрести Telegram Звезды, Премиум - для себя или в подарок 🎁\n\n"
+        "Для взаимодействия с ботом, используйте кнопки ниже 👇"
+    )
 
 
 class ShopBot:
@@ -28,7 +34,13 @@ class ShopBot:
         command, _rest = _command(text)
         if command != "/start":
             return
-        self.api.send_message(int(chat["id"]), WELCOME, remove_keyboard=True)
+        user = message.get("from") or {}
+        raw_name = user.get("first_name") if isinstance(user.get("first_name"), str) else ""
+        self.api.send_message(
+            int(chat["id"]),
+            welcome_text(raw_name),
+            link_button=(BUY_STARS, self.app_url),
+        )
 
     def run(self) -> None:
         offset = None
@@ -59,7 +71,7 @@ def main() -> None:
     try:
         api.delete_webhook()
         api.set_commands()
-        api.set_menu_button(app_url)
+        api.clear_menu_button()
     except ShopError as exc:
         print(f"telegram setup: {exc.message}")
     print("telegram bot polling")
