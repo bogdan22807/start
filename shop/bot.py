@@ -12,10 +12,11 @@ from shop.telegram_api import TelegramApi
 
 
 class ShopBot:
-    def __init__(self, shop: Shop, api, admin_ids: set[int]):
+    def __init__(self, shop: Shop, api, admin_ids: set[int], claim_code: str = ""):
         self.shop = shop
         self.api = api
         self.admin_ids = admin_ids
+        self.claim_code = claim_code.strip()
         self.pending: dict[int, str] = {}
 
     def handle(self, update: dict) -> None:
@@ -44,6 +45,9 @@ class ShopBot:
             return
         if command == "/paid":
             self._confirm(chat_id, user_id, rest)
+            return
+        if command == "/claim":
+            self._claim(chat_id, user_id, rest)
             return
         if chat_id in self.pending and not command:
             self._create_for_username(chat_id, self.pending[chat_id], text)
@@ -98,10 +102,14 @@ class ShopBot:
             buttons.append([(label, f"b:{item['id']}")])
         lines = [
             "Магазин звёзд и Premium.",
-            "Выберите товар. Сумма придёт следующим сообщением.",
-            "Выдача начнётся после подтверждения оплаты администратором.",
+            "Выберите товар и username получателя. Бот напишет сумму.",
+            "Выдача начинается после команды администратора /paid.",
             f"Ваш Telegram id: {user_id}",
         ]
+        if self.shop.mode == "dry-run":
+            lines.append("Сейчас проверка: Fragment не вызывается, звёзды и Premium не отправляются.")
+        if not self.admin_ids and self.claim_code:
+            lines.append("Чтобы подтверждать заказы, отправьте /claim и код администратора.")
         if not buttons:
             lines.append("Цены ещё не заданы. Нужны SHOP_STAR_UNIT_COST и цены Premium.")
         self.api.send_message(chat_id, "\n".join(lines), buttons or None)
@@ -136,6 +144,8 @@ class ShopBot:
             f"К оплате {order.customer_amount} {order.currency}.\n"
             "После оплаты администратор подтвердит выдачу."
         )
+        if chat_id in self.admin_ids:
+            text += f"\nПодтвердить: /paid {order.id}"
         self.api.send_message(chat_id, text)
         notice = f"Новый заказ {order.id}\n{title} для @{order.recipient_username}\n{order.customer_amount} {order.currency}\n/paid {order.id}"
         for admin_id in sorted(self.admin_ids):
@@ -165,12 +175,32 @@ class ShopBot:
             self.api.send_message(chat_id, exc.message)
             return
         if order.status == "fulfilled":
-            result = f"Заказ {order.id} выдан @{order.recipient_username}."
+            if self.shop.mode == "dry-run":
+                result = (
+                    f"Заказ {order.id} записан как выдан @{order.recipient_username}. "
+                    "Проверка: Fragment не вызывался, звёзды и Premium не отправлены."
+                )
+            else:
+                result = f"Заказ {order.id} выдан @{order.recipient_username}."
         else:
             result = f"Заказ {order.id} принят Fragment, статус {order.status}. Повторите /paid {order.id}"
         self.api.send_message(chat_id, result)
         if order.buyer_chat_id and order.buyer_chat_id != chat_id:
             self.api.send_message(order.buyer_chat_id, result)
+
+    def _claim(self, chat_id: int, user_id: int, rest: str) -> None:
+        if user_id in self.admin_ids:
+            self.api.send_message(chat_id, "Вы уже администратор. Подтверждение заказа: /paid id_заказа")
+            return
+        code = rest.strip()
+        if not self.claim_code or code != self.claim_code:
+            self.api.send_message(chat_id, "Код администратора не подошёл. Формат: /claim код")
+            return
+        self.admin_ids.add(user_id)
+        self.api.send_message(
+            chat_id,
+            f"Вы администратор. Ваш Telegram id: {user_id}.\nПосле оплаты покупателя отправьте /paid id_заказа.",
+        )
 
 
 def main() -> None:
@@ -186,10 +216,19 @@ def main() -> None:
             admin_ids.add(int(part))
         except ValueError as exc:
             raise SystemExit("TELEGRAM_ADMIN_IDS должен быть списком числовых id через запятую.") from exc
-    if not admin_ids:
+    claim_code = os.environ.get("TELEGRAM_ADMIN_CLAIM", "").strip()
+    if not admin_ids and not claim_code:
         print("TELEGRAM_ADMIN_IDS пуст. Напишите боту /id и подставьте этот номер, иначе оплату некому подтвердить.")
+    elif not admin_ids:
+        print("Администраторов нет. /claim с кодом TELEGRAM_ADMIN_CLAIM назначает администратора.")
     shop = load_shop(OrderStore(os.environ.get("SHOP_DB", "data/orders.db")))
-    bot = ShopBot(shop, TelegramApi(token), admin_ids)
+    api = TelegramApi(token)
+    try:
+        api.delete_webhook()
+        api.set_commands()
+    except ShopError as exc:
+        print(f"telegram setup: {exc.message}")
+    bot = ShopBot(shop, api, admin_ids, claim_code=claim_code)
     print("telegram bot polling")
     try:
         bot.run()
@@ -204,3 +243,7 @@ def _command(text: str) -> tuple[str, str]:
     head, _, rest = stripped.partition(" ")
     name = head.split("@", 1)[0].lower()
     return name, rest.strip()
+
+
+if __name__ == "__main__":
+    main()

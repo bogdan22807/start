@@ -39,6 +39,23 @@ class TelegramApi:
             raise ShopError("telegram_rejected", "Telegram вернул апдейты в неожиданном виде.", 502)
         return result
 
+    def delete_webhook(self) -> None:
+        self._call("deleteWebhook", {"drop_pending_updates": False})
+
+    def set_commands(self) -> None:
+        self._call(
+            "setMyCommands",
+            {
+                "commands": [
+                    {"command": "catalog", "description": "Звёзды и Premium"},
+                    {"command": "cancel", "description": "Отменить выбор"},
+                    {"command": "id", "description": "Показать Telegram id"},
+                    {"command": "paid", "description": "Админ: подтвердить заказ"},
+                    {"command": "claim", "description": "Стать администратором"},
+                ]
+            },
+        )
+
     def _call(self, method: str, payload: dict, timeout: int = 20):
         if not self.token:
             raise ShopError("missing_bot_token", "Для бота в Telegram нужен BOT_TOKEN от @BotFather.", 503)

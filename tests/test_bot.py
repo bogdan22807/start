@@ -56,8 +56,27 @@ class BotTests(unittest.TestCase):
 
         self.bot.handle(_message(7, f"/paid {order_id}", username="owner"))
         self.assertIn("выдан @friend_name", self.api.sent[-2]["text"])
+        self.assertIn("Fragment не вызывался", self.api.sent[-2]["text"])
         self.assertEqual(self.api.sent[-1]["chat_id"], 20)
         self.assertEqual(self.shop.get_order(order_id).status, "fulfilled")
+
+    def test_claim_code_makes_the_sender_an_admin(self):
+        self.bot.admin_ids.clear()
+        self.bot.claim_code = "once"
+        self.bot.handle(_message(20, "/claim wrong"))
+        self.assertIn("не подошёл", self.api.sent[-1]["text"])
+        self.assertNotIn(20, self.bot.admin_ids)
+
+        self.bot.handle(_callback(20, "alexdev", "b:stars_100"))
+        self.bot.handle(_message(20, "@friend", username="alexdev"))
+        order_id = next(item["text"] for item in self.api.sent if item["text"].startswith("Заказ ")).splitlines()[0]
+        order_id = order_id.removeprefix("Заказ ")
+
+        self.bot.handle(_message(20, "/claim once"))
+        self.assertIn(20, self.bot.admin_ids)
+        self.bot.handle(_message(20, f"/paid {order_id}"))
+        self.assertEqual(self.shop.get_order(order_id).status, "fulfilled")
+        self.assertIn("Fragment не вызывался", self.api.sent[-1]["text"])
 
     def test_self_button_uses_telegram_username(self):
         self.bot.handle(_callback(20, "alexdev", "m:premium_3m"))
