@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -26,6 +27,7 @@ from shop.cryptopay import CryptoPay
 from shop.errors import ShopError
 from shop.fragment import FragmentClient
 from shop.orders import OrderStore
+from shop.receipt import receipt_text
 from shop.pricing import PriceBook
 from shop.server import make_server
 from shop.service import Shop
@@ -47,6 +49,7 @@ def purchase_env(**extra):
         "WEBAPP_URL",
         "CRYPTO_PAY_BASE",
         "FRAGMENT_API_BASE",
+        "SHOP_NOTIFY_FILE",
     }
     saved = {key: os.environ.get(key) for key in keys}
     try:
@@ -269,6 +272,46 @@ class CheckoutTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["message"], "Звёзды отправлены на @alexdev.")
         self.assertEqual(script.calls[1]["body"]["quantity"], 100)
 
+    def test_receipt_words_stay_short(self):
+        self.assertEqual(receipt_text({"kind": "stars", "amount": 1, "recipient": "alex"}), "⭐ 1 звезда → @alex")
+        self.assertEqual(receipt_text({"kind": "stars", "amount": 1000, "recipient": "alex"}), "⭐ 1 000 звёзд → @alex")
+        self.assertEqual(receipt_text({"kind": "premium", "months": 3, "recipient": "alex"}), "💎 Premium на 3 месяца → @alex")
+        self.assertEqual(receipt_text({"kind": "premium", "months": 12, "recipient": "alex"}), "💎 Premium на 12 месяцев → @alex")
+
+    def test_completed_order_messages_the_buyer_once(self):
+        bot = "123456:AAFakeTokenForTestsOnly0001"
+        script = Script(
+            [
+                (200, {"success": True, "recipient": "hash-1", "name": "Alex"}),
+                (202, {"order_id": "550e8400-e29b-41d4-a716-446655440009", "status": "completed", "quantity": 50}),
+                (200, {"success": True, "recipient": "hash-1", "name": "Alex"}),
+                (202, {"order_id": "550e8400-e29b-41d4-a716-446655440009", "status": "completed", "quantity": 50}),
+            ]
+        )
+        fragment = FragmentClient(FRAGMENT, "https://fragment.test", opener=script)
+        pay = RecordingPay()
+        sent = []
+        folder = tempfile.TemporaryDirectory()
+        try:
+            with purchase_env(BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")):
+                create_invoice(
+                    {
+                        "kind": "stars",
+                        "recipient": "alexdev",
+                        "amount": 50,
+                        "init_data": _init_data(bot, 4242, int(time.time())),
+                    },
+                    cryptopay=pay,
+                )
+                self.assertEqual(json.loads(pay.invoice["payload"])["order"]["buyer_id"], 4242)
+                pay.invoice["status"] = "paid"
+                tell = lambda chat, text: sent.append((chat, text))
+                invoice_status(77, cryptopay=pay, fragment=fragment, sender=tell)
+                invoice_status(77, cryptopay=pay, fragment=fragment, sender=tell)
+        finally:
+            folder.cleanup()
+        self.assertEqual(sent, [(4242, "⭐ 50 звёзд → @alexdev")])
+
     def test_webhook_refetches_the_invoice(self):
         raw = json.dumps({"update_id": 1, "update_type": "invoice_paid", "payload": {"invoice_id": 77, "status": "paid"}}).encode()
         signature = _webhook_signature(raw, TOKEN)
@@ -433,6 +476,16 @@ class FakeFragment:
 
     def get_order(self, order_id):
         raise AssertionError(order_id)
+
+
+def _init_data(token: str, user_id: int, auth_date: int) -> str:
+    pairs = {"auth_date": str(auth_date), "user": json.dumps({"id": user_id}, separators=(",", ":"))}
+    check = "\n".join(f"{key}={value}" for key, value in sorted(pairs.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    pairs["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    from urllib.parse import urlencode
+
+    return urlencode(pairs)
 
 
 def _webhook_signature(raw: bytes, token: str) -> str:

@@ -123,6 +123,7 @@ class BotTests(unittest.TestCase):
         self.assertIn('id="theme"', page)
         self.assertIn('data-theme="dark"', page)
         self.assertIn("/api/invoice", page)
+        self.assertIn("init_data", page)
         self.assertIn("openTelegramLink", page)
         self.assertNotIn("деньги не списываются", folded)
         self.assertNotIn("украин", folded)

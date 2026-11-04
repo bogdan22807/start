@@ -17,8 +17,10 @@ from shop.cryptopay import CryptoPay
 from shop.errors import ShopError
 from shop.fragment import PRODUCTION_BASE as FRAGMENT_BASE
 from shop.fragment import FragmentClient
-from shop.tokens import fragment_api_token
+from shop.receipt import send_receipt
+from shop.tokens import fragment_api_token, telegram_bot_token
 from shop.username import normalize_username
+from shop.webapp import webapp_user_id
 
 _STAR_PRICES = {
     50: "0.94",
@@ -94,6 +96,10 @@ def parse_order(body: dict) -> dict:
 def create_invoice(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     require_purchases()
     order = parse_order(body)
+    init_data = body.get("init_data") if isinstance(body.get("init_data"), str) else ""
+    buyer = webapp_user_id(init_data, telegram_bot_token())
+    if buyer:
+        order["buyer_id"] = buyer
     token = os.environ["CRYPTO_PAY_TOKEN"].strip()
     client = cryptopay or CryptoPay(token, base_url=_crypto_base())
     fields = _signed_fields(order)
@@ -126,14 +132,20 @@ def create_invoice(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     }
 
 
-def invoice_status(invoice_id: object, *, cryptopay: CryptoPay | None = None, fragment: FragmentClient | None = None) -> dict:
+def invoice_status(
+    invoice_id: object,
+    *,
+    cryptopay: CryptoPay | None = None,
+    fragment: FragmentClient | None = None,
+    sender=None,
+) -> dict:
     require_purchases()
     text = str(invoice_id).strip()
     if not text.isdigit() or len(text) > 20:
         raise ShopError("bad_request", "Неизвестный счёт.", 400)
     token = os.environ["CRYPTO_PAY_TOKEN"].strip()
     client = cryptopay or CryptoPay(token, base_url=_crypto_base())
-    return settle(client.get_invoice(text), token, fragment=fragment)
+    return settle(client.get_invoice(text), token, fragment=fragment, sender=sender)
 
 
 def cryptobot_webhook(raw: bytes, signature: str, *, cryptopay: CryptoPay | None = None, fragment: FragmentClient | None = None) -> dict:
@@ -155,7 +167,7 @@ def cryptobot_webhook(raw: bytes, signature: str, *, cryptopay: CryptoPay | None
     return settle(fresh, token, fragment=fragment)
 
 
-def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None) -> dict:
+def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None, sender=None) -> dict:
     invoice_id = invoice.get("invoice_id")
     status = str(invoice.get("status") or "")
     if status != "paid":
@@ -171,10 +183,10 @@ def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None)
     order = _verified_order(invoice, token)
     if str(invoice.get("asset") or "") != "USDT" or _cents(invoice.get("amount")) != _cents(order["total"]):
         raise ShopError("amount_mismatch", "Сумма счёта не совпала с ценой. Покупка не отправлена.", 409)
-    return _deliver(order, invoice_id, fragment)
+    return _deliver(order, invoice_id, fragment, sender=sender)
 
 
-def deliver_paid_invoices(*, cryptopay: CryptoPay | None = None, fragment: FragmentClient | None = None) -> dict:
+def deliver_paid_invoices(*, cryptopay: CryptoPay | None = None, fragment: FragmentClient | None = None, sender=None) -> dict:
     require_purchases()
     token = os.environ["CRYPTO_PAY_TOKEN"].strip()
     client = cryptopay or CryptoPay(token, base_url=_crypto_base())
@@ -183,7 +195,7 @@ def deliver_paid_invoices(*, cryptopay: CryptoPay | None = None, fragment: Fragm
         if str(invoice.get("status") or "") != "paid":
             continue
         try:
-            items.append(settle(invoice, token, fragment=fragment))
+            items.append(settle(invoice, token, fragment=fragment, sender=sender))
         except ShopError as exc:
             if exc.code in {"bad_invoice", "amount_mismatch"}:
                 continue
@@ -223,7 +235,7 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
         return 400, {"error": "bad_json", "message": "Тело запроса должно быть JSON."}
 
 
-def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None) -> dict:
+def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, sender=None) -> dict:
     client = fragment or FragmentClient(fragment_api_token(), _fragment_base())
     try:
         if order["kind"] == "stars":
@@ -273,6 +285,7 @@ def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None) -
             message = f"Звёзды отправлены на @{order['recipient']}."
         else:
             message = f"Premium отправлен на @{order['recipient']}."
+        send_receipt(order, invoice_id, sender=sender)
         return _progress(invoice_id, message, retry=False, delivered=True)
     if status == "failed":
         detail = remote.get("error") if isinstance(remote, dict) else None
@@ -323,6 +336,8 @@ def _verified_order(invoice: dict, token: str) -> dict:
     if not verify_signature(expected, raw["sig"]):
         raise ShopError("bad_invoice", "Подпись счёта не сходится. Покупка не отправлена.", 409)
     order = parse_order(fields)
+    if fields.get("buyer_id") is not None:
+        order["buyer_id"] = _whole(fields["buyer_id"])
     if _cents(fields.get("total")) != _cents(order["total"]):
         raise ShopError("bad_invoice", "Цена в счёте не сходится.", 409)
     return order
@@ -334,6 +349,8 @@ def _signed_fields(order: dict) -> dict:
         fields["amount"] = order["amount"]
     else:
         fields["months"] = order["months"]
+    if order.get("buyer_id"):
+        fields["buyer_id"] = order["buyer_id"]
     return fields
 
 
@@ -353,6 +370,8 @@ def _canonical(fields: dict) -> dict:
         data["months"] = _whole(fields.get("months"))
     else:
         raise ShopError("bad_product", "Выберите звёзды или Premium.", 400)
+    if fields.get("buyer_id") not in (None, ""):
+        data["buyer_id"] = _whole(fields["buyer_id"])
     return data
 
 

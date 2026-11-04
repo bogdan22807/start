@@ -984,12 +984,13 @@
             response = await fetch("/api/invoice", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                kind: picked.kind,
-                recipient: picked.recipient,
-                amount: picked.amount,
-                months: picked.months
-              })
+            body: JSON.stringify({
+              kind: picked.kind,
+              recipient: picked.recipient,
+              amount: picked.amount,
+              months: picked.months,
+              init_data: tg && tg.initData ? tg.initData : ""
+            })
             });
           } catch (error) {
             response = null;
