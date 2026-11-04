@@ -79,79 +79,33 @@
     #theme svg { width: 18px; height: 18px; grid-area: 1 / 1; }
     html[data-theme="dark"] #theme .moon,
     html[data-theme="light"] #theme .sun { display: none; }
-    .label {
-      margin: 18px 2px 8px;
-      color: var(--label);
-      font-size: 12px;
-      font-weight: 650;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-    .periods { display: flex; flex-wrap: wrap; gap: 6px; }
-    .periods button {
-      height: 36px;
-      padding: 0 12px;
-      border-radius: 13px;
-      background: var(--card);
-      color: var(--idle);
-      font-size: 14px;
-      font-weight: 700;
-      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
-    }
-    .periods button.on {
-      background: var(--blue);
-      color: #fff;
-      box-shadow: 0 8px 18px rgba(27, 134, 238, 0.18);
-    }
-    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+    .metrics { display: grid; gap: 8px; margin-top: 18px; }
     .metric {
-      min-height: 112px;
-      padding: 12px 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 72px;
+      padding: 14px 16px;
       border-radius: 16px;
       background: var(--card);
       box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
     }
-    .metric .ico, .label .ico {
-      width: 28px;
-      height: 28px;
-      display: block;
-      margin-bottom: 8px;
-    }
-    .label .ico {
-      width: 16px;
-      height: 16px;
-      display: inline-block;
-      vertical-align: -3px;
-      margin: 0 6px 0 0;
-    }
+    .metric .ico { width: 32px; height: 32px; flex: none; }
     .metric span {
-      display: block;
       color: var(--label);
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
     .metric strong {
-      display: block;
-      margin-top: 8px;
-      font-size: 22px;
-      line-height: 1.1;
+      margin-left: auto;
+      font-size: 26px;
+      line-height: 1;
       font-weight: 760;
       letter-spacing: -0.04em;
-      word-break: break-word;
     }
-    .metric em { font-style: normal; color: var(--muted); font-size: 12px; font-weight: 650; }
-    .chart {
-      padding: 12px 8px 8px;
-      border-radius: 18px;
-      background: var(--card);
-      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
-      overflow-x: auto;
-    }
-    .chart svg { display: block; height: 168px; }
-    .chart text { fill: var(--muted); font-size: 10px; font-family: inherit; }
-    .caption { min-height: 18px; margin: 8px 4px 0; color: var(--muted); font-size: 13px; }
+    .metric em { font-style: normal; color: var(--muted); font-size: 13px; font-weight: 650; }
     .status, .lock {
       margin: 18px 0 0;
       padding: 14px 16px;
@@ -201,28 +155,11 @@
     <p class="status" id="status">Считаю…</p>
     <p class="lock" id="lock" hidden></p>
     <section id="panel" hidden>
-      <p class="label">Период</p>
-      <div class="periods" id="periods">
-        <button type="button" data-period="1">1 день</button>
-        <button type="button" data-period="3">3 дня</button>
-        <button type="button" data-period="7">7 дней</button>
-        <button type="button" data-period="30">30 дней</button>
-        <button type="button" data-period="all" class="on">Всё</button>
-      </div>
       <div class="metrics">
         <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#user"/></svg><span>Пользователи</span><strong id="users">0</strong></div>
         <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#gem"/></svg><span>Заказы</span><strong id="orders">0</strong></div>
         <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#star"/></svg><span>Сумма</span><strong id="sum">0.00 <em>USDT</em></strong></div>
       </div>
-      <p class="label"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#star"/></svg>Сумма</p>
-      <div class="chart" id="sumChart"></div>
-      <p class="caption" id="sumCaption"></p>
-      <p class="label"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#gem"/></svg>Заказы</p>
-      <div class="chart" id="ordersChart"></div>
-      <p class="caption" id="ordersCaption"></p>
-      <p class="label"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#user"/></svg>Пользователи</p>
-      <div class="chart" id="usersChart"></div>
-      <p class="caption" id="usersCaption"></p>
     </section>
   </main>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -232,8 +169,6 @@
     const status = document.getElementById("status");
     const lock = document.getElementById("lock");
     const panel = document.getElementById("panel");
-    let report = null;
-    let current = "all";
 
     function paintChrome(color) {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -253,7 +188,6 @@
       document.getElementById("theme").setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
       paintChrome(dark ? "#000000" : "#FFFAF6");
       try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (error) {}
-      if (report) show(current);
     }
 
     function numberText(value) {
@@ -267,69 +201,12 @@
       return (negative ? "−" : "") + numberText(whole || "0") + "." + (frac || "00");
     }
 
-    function chart(host, caption, points, key, color, format) {
-      const step = points.length > 16 ? 3 : (points.length > 10 ? 2 : 1);
-      const values = points.map((point) => Number(String(point[key]).replace(/\s/g, "")) || 0);
-      const max = Math.max(...values, 0);
-      const width = Math.max(320, points.length * 28);
-      const height = 168;
-      const baseline = 128;
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
-      svg.setAttribute("width", String(width));
-      svg.setAttribute("role", "img");
-      points.forEach((point, index) => {
-        const value = values[index];
-        const barHeight = max === 0 ? 2 : Math.max(2, Math.round((value / max) * 104));
-        const x = 10 + index * ((width - 20) / points.length);
-        const barWidth = Math.max(6, (width - 20) / points.length - 8);
-        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rect.setAttribute("x", x.toFixed(1));
-        rect.setAttribute("y", String(baseline - barHeight));
-        rect.setAttribute("width", barWidth.toFixed(1));
-        rect.setAttribute("height", String(barHeight));
-        rect.setAttribute("rx", "5");
-        rect.setAttribute("fill", color);
-        rect.style.cursor = "pointer";
-        const showPoint = () => {
-          caption.textContent = point.title + " · " + format(point[key]);
-          svg.querySelectorAll("rect").forEach((item) => item.setAttribute("opacity", item === rect ? "1" : "0.45"));
-        };
-        rect.addEventListener("click", showPoint);
-        svg.appendChild(rect);
-        if (index % step === 0) {
-          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          text.setAttribute("x", (x + barWidth / 2).toFixed(1));
-          text.setAttribute("y", "150");
-          text.setAttribute("text-anchor", "middle");
-          text.textContent = point.label;
-          svg.appendChild(text);
-        }
-      });
-      host.replaceChildren(svg);
-      const last = points[points.length - 1];
-      caption.textContent = last ? last.title + " · " + format(last[key]) : "";
-    }
-
-    function show(period) {
-      current = period;
-      const data = report.periods[period];
+    function show(data) {
       document.getElementById("users").textContent = numberText(data.users);
       document.getElementById("orders").textContent = numberText(data.orders);
       document.getElementById("sum").innerHTML = moneyValue(data.sum) + ' <em>USDT</em>';
-      document.querySelectorAll(".periods button").forEach((button) => {
-        button.classList.toggle("on", button.dataset.period === period);
-      });
-      chart(document.getElementById("sumChart"), document.getElementById("sumCaption"), data.points, "sum", "#FACE13", (value) => moneyValue(value) + " USDT");
-      chart(document.getElementById("ordersChart"), document.getElementById("ordersCaption"), data.points, "orders", "#1B86EE", (value) => numberText(value));
-      chart(document.getElementById("usersChart"), document.getElementById("usersCaption"), data.points, "users", "#7EBAFF", (value) => numberText(value));
     }
 
-    document.getElementById("periods").addEventListener("click", (event) => {
-      const button = event.target.closest("button");
-      if (!button || !report) return;
-      show(button.dataset.period);
-    });
     document.getElementById("theme").addEventListener("click", () => {
       applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
@@ -365,10 +242,9 @@
         status.textContent = body.message || "Не удалось посчитать статистику.";
         return;
       }
-      report = body;
       status.hidden = true;
       panel.hidden = false;
-      show("all");
+      show(body.periods.all);
     }).catch(() => {
       status.textContent = "Нет связи с магазином.";
     });

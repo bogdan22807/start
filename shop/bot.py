@@ -136,8 +136,7 @@ def stat_text() -> str:
         "📊 Статистика\n\n"
         f"👤 Пользователи: {entire['users']}\n"
         f"⭐ Заказы: {entire['orders']}\n"
-        f"💰 Сумма: {entire['sum']} USDT\n\n"
-        "Графики за 1, 3, 7, 30 дней и всё время — на кнопке."
+        f"💰 Сумма: {entire['sum']} USDT"
     )
 
 
