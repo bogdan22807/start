@@ -888,9 +888,10 @@
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
-    async function readInvoice(invoiceId) {
+    async function readInvoice(invoiceId, pay) {
       try {
-        const response = await fetch("/api/invoice?id=" + encodeURIComponent(invoiceId));
+        const query = "/api/invoice?id=" + encodeURIComponent(invoiceId) + (pay === "card" ? "&pay=card" : "");
+        const response = await fetch(query);
         const body = await response.json().catch(() => ({}));
         return Object.assign({ ok: response.ok }, body);
       } catch (error) {
@@ -898,25 +899,40 @@
       }
     }
 
-    function openInvoice(url) {
+    function openInvoice(url, pay) {
       if (!url) return;
+      if (pay === "card") {
+        if (tg && typeof tg.openLink === "function") {
+          try { tg.openLink(url); return; } catch (error) {}
+        }
+        window.open(url, "_blank");
+        return;
+      }
       if (tg && typeof tg.openTelegramLink === "function") {
         try { tg.openTelegramLink(url); return; } catch (error) {}
       }
       window.open(url, "_blank");
     }
 
-    async function watchInvoice(invoiceId) {
+    function payHint(pay, charge) {
+      const sum = charge ? " Сумма " + charge + "." : "";
+      if (pay === "card") return "Оплатите картой." + sum + " После оплаты покупка уйдёт сама.";
+      return "Оплатите счёт в Crypto Bot." + sum + " После оплаты покупка уйдёт сама.";
+    }
+
+    async function watchInvoice(invoiceId, pay) {
       const generation = ++watchGeneration;
       for (let step = 0; step < 300; step += 1) {
         if (generation !== watchGeneration) return;
         if (step > 0) await sleep(3000);
         if (generation !== watchGeneration) return;
-        const state = await readInvoice(invoiceId);
+        const state = await readInvoice(invoiceId, pay);
         if (generation !== watchGeneration) return;
         if (!state.ok) {
-          if (state.error && state.error !== "cryptopay_unavailable" && state.error !== "fragment_unavailable") {
+          const retryable = state.error === "cryptopay_unavailable" || state.error === "fragment_unavailable" || state.error === "monobank_unavailable" || state.error === "rate_unavailable";
+          if (!retryable) {
             showStatus(state.message || "Не удалось проверить оплату.");
+            if (state.error === "amount_mismatch" || state.error === "bad_invoice") forgetInvoice();
             return;
           }
           continue;
@@ -937,25 +953,27 @@
           showStatus(state.message || "Оплата прошла. Отправляю покупку…");
           continue;
         }
-        if (state.status === "expired") {
-          showStatus(state.message || "Счёт истёк. Нажмите Crypto Bot ещё раз.");
+        if (state.retry === false || state.status === "expired") {
+          showStatus(state.message || "Счёт истёк. Нажмите оплату ещё раз.");
           forgetInvoice();
           return;
         }
-        showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+        showStatus(state.message || payHint(pay));
       }
       showStatus("Если оплата уже прошла, откройте магазин снова: покупка отправится сама.");
     }
 
-    async function startCryptoPay(picked) {
+    async function startPayment(picked, method) {
       if (creating) return;
       creating = true;
       let watchId = "";
+      let watchPay = method;
       try {
         const saved = savedInvoice();
         let reuse = false;
         if (saved && saved.id) {
-          const state = await readInvoice(saved.id);
+          const savedPay = saved.pay || "cryptobot";
+          const state = await readInvoice(saved.id, savedPay);
           if (state.ok && state.delivered) {
             forgetInvoice();
             showStatus(state.message);
@@ -963,34 +981,38 @@
           } else if (state.ok && state.paid) {
             showStatus(state.message || "Оплата прошла. Отправляю покупку…");
             watchId = saved.id;
+            watchPay = savedPay;
             reuse = true;
-          } else if (state.ok && state.status === "active" && sameOrder(saved, picked)) {
-            openInvoice(saved.url);
-            showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+          } else if (state.ok && state.retry !== false && savedPay === method && sameOrder(saved, picked) && (state.status === "active" || state.status === "created" || state.status === "processing" || state.status === "hold")) {
+            openInvoice(saved.url, savedPay);
+            showStatus(state.message || payHint(savedPay));
             watchId = saved.id;
+            watchPay = savedPay;
             reuse = true;
-          } else if (!state.ok && state.error !== "invoice_not_found") {
+          } else if (!state.ok && state.error !== "invoice_not_found" && savedPay === method) {
             showStatus(state.message || "Нет связи с магазином. Попробуйте ещё раз.");
             watchId = saved.id;
+            watchPay = savedPay;
             reuse = true;
           } else {
             forgetInvoice();
           }
         }
         if (!reuse) {
-          showStatus("Создаю счёт в Crypto Bot…");
+          showStatus(method === "card" ? "Создаю счёт на карту…" : "Создаю счёт в Crypto Bot…");
           let response;
           try {
             response = await fetch("/api/invoice", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: picked.kind,
-              recipient: picked.recipient,
-              amount: picked.amount,
-              months: picked.months,
-              init_data: tg && tg.initData ? tg.initData : ""
-            })
+              body: JSON.stringify({
+                kind: picked.kind,
+                recipient: picked.recipient,
+                amount: picked.amount,
+                months: picked.months,
+                pay: method,
+                init_data: tg && tg.initData ? tg.initData : ""
+              })
             });
           } catch (error) {
             response = null;
@@ -1004,21 +1026,24 @@
               rememberInvoice({
                 id: body.invoice_id,
                 url: body.pay_url,
+                pay: method,
                 kind: body.kind,
                 recipient: body.recipient,
                 amount: body.amount,
-                months: body.months
+                months: body.months,
+                charge: body.charge || ""
               });
-              openInvoice(body.pay_url);
-              showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+              openInvoice(body.pay_url, method);
+              showStatus(payHint(method, body.charge));
               watchId = body.invoice_id;
+              watchPay = method;
             }
           }
         }
       } finally {
         creating = false;
       }
-      if (watchId) await watchInvoice(watchId);
+      if (watchId) await watchInvoice(watchId, watchPay);
     }
 
     pay.addEventListener("click", () => {
@@ -1039,11 +1064,11 @@
       const picked = selection();
       if (!picked.ok) return;
       paywall.querySelectorAll(".method").forEach((item) => item.classList.toggle("on", item === button));
-      if (button.dataset.pay !== "cryptobot") {
-        showStatus("Сейчас оплата идёт через Crypto Bot. Карта и Heleket появятся позже.");
+      if (button.dataset.pay === "heleket") {
+        showStatus("Heleket пока не подключён.");
         return;
       }
-      startCryptoPay(picked);
+      startPayment(picked, button.dataset.pay === "card" ? "card" : "cryptobot");
     });
     async function sendPaidOrders() {
       try {
@@ -1071,7 +1096,7 @@
       });
       summary.textContent = "Проверяю прошлый счёт";
       showStatus("Проверяю оплату…");
-      watchInvoice(pending.id);
+      watchInvoice(pending.id, pending.pay || "cryptobot");
     }
   </script>
 </body>

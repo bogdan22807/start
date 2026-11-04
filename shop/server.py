@@ -62,7 +62,7 @@ class ShopHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path.rstrip("/") in {"/api/invoice", "/api/cryptobot"}:
+        if path.rstrip("/") in {"/api/invoice", "/api/cryptobot", "/api/monobank"}:
             try:
                 raw = self._read_raw(65536)
             except ShopError as exc:

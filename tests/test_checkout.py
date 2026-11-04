@@ -50,6 +50,11 @@ def purchase_env(**extra):
         "CRYPTO_PAY_BASE",
         "FRAGMENT_API_BASE",
         "SHOP_NOTIFY_FILE",
+        "MONOBANK_TOKEN",
+        "MONO_TOKEN",
+        "MONOBANK_API_KEY",
+        "MONOBANK_API_TOKEN",
+        "MONOBANK_CCY",
     }
     saved = {key: os.environ.get(key) for key in keys}
     try:

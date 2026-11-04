@@ -1,0 +1,2 @@
+# Monobank checks the card webhook with ECDSA. Everything else in the shop uses the standard library.
+cryptography==41.0.7

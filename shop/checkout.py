@@ -1,14 +1,15 @@
-"""Crypto Bot checkout. The customer pays USDT; Fragment then sends the purchase.
+"""Customer checkout. Crypto Bot takes USDT, Monobank takes the card.
 
-The browser never sees CRYPTO_PAY_TOKEN or FRAGMENT_API_KEY. A paid invoice is
-accepted only after Crypto Pay itself says it is paid and the signed order
-inside it still matches the price table.
+The browser never sees payment tokens or the Fragment key. A purchase is sent
+only after the provider itself confirms the payment and the signed order still
+matches the price the server calculated.
 """
 
 import hashlib
 import hmac
 import json
 import os
+import re
 from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import parse_qs
 
@@ -17,6 +18,9 @@ from shop.cryptopay import CryptoPay
 from shop.errors import ShopError
 from shop.fragment import PRODUCTION_BASE as FRAGMENT_BASE
 from shop.fragment import FragmentClient
+from shop.monobank import CARD_ID
+from shop.monobank import Monobank
+from shop.monobank import card_currency, monobank_token, nbu_usd_rate, verify_sign
 from shop.receipt import send_receipt
 from shop.tokens import fragment_api_token, telegram_bot_token
 from shop.username import normalize_username
@@ -93,13 +97,20 @@ def parse_order(body: dict) -> dict:
     raise ShopError("bad_product", "Выберите звёзды или Premium.", 400)
 
 
-def create_invoice(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
+def create_invoice(body: dict, *, cryptopay: CryptoPay | None = None, monobank: Monobank | None = None, rate: Decimal | None = None) -> dict:
+    if not isinstance(body, dict):
+        raise ShopError("bad_request", "JSON должен быть объектом.", 400)
+    pay = body.get("pay")
+    if pay in (None, "", "cryptobot"):
+        return _create_crypto(body, cryptopay=cryptopay)
+    if pay == "card":
+        return _create_card(body, monobank=monobank, rate=rate)
+    raise ShopError("bad_pay", "Этот способ оплаты ещё не подключён.", 400)
+
+
+def _create_crypto(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     require_purchases()
-    order = parse_order(body)
-    init_data = body.get("init_data") if isinstance(body.get("init_data"), str) else ""
-    buyer = webapp_user_id(init_data, telegram_bot_token())
-    if buyer:
-        order["buyer_id"] = buyer
+    order = _order_with_buyer(body)
     token = os.environ["CRYPTO_PAY_TOKEN"].strip()
     client = cryptopay or CryptoPay(token, base_url=_crypto_base())
     fields = _signed_fields(order)
@@ -119,26 +130,45 @@ def create_invoice(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     pay_url = invoice.get("mini_app_invoice_url") or invoice.get("bot_invoice_url") or invoice.get("web_app_invoice_url")
     if not isinstance(pay_url, str) or not pay_url.startswith("https://"):
         raise ShopError("cryptopay_rejected", "Crypto Bot не дал ссылку на оплату.", 502)
-    return {
-        "invoice_id": invoice["invoice_id"],
-        "pay_url": pay_url,
-        "status": invoice.get("status") or "active",
-        "total": order["total"],
-        "label": description,
-        "kind": order["kind"],
-        "recipient": order["recipient"],
-        "amount": order.get("amount"),
-        "months": order.get("months"),
-    }
+    return _created(invoice["invoice_id"], pay_url, invoice.get("status") or "active", order, description)
+
+
+def _create_card(body: dict, *, monobank: Monobank | None = None, rate: Decimal | None = None) -> dict:
+    token = _require_card()
+    order = _order_with_buyer(body)
+    ccy, minor, charge = _card_amount(order["total"], rate)
+    order["ccy"] = ccy
+    order["minor"] = minor
+    fields = _signed_fields(order)
+    reference = json.dumps(
+        {"order": fields, "sig": _sign(fields, token)},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    if len(reference) > 500:
+        raise ShopError("bad_invoice", "Счёт не собрался. Покупка не создана.", 500)
+    description = f"{order['label']} для @{order['recipient']}"
+    client = monobank or Monobank(token)
+    invoice = client.create_invoice(minor, ccy, reference, description, _shop_url(), _shop_url().rstrip("/") + "/api/monobank")
+    created = _created(invoice["invoiceId"], invoice["pageUrl"], "created", order, description)
+    created["pay"] = "card"
+    created["charge"] = charge
+    return created
 
 
 def invoice_status(
     invoice_id: object,
     *,
+    pay: str = "cryptobot",
     cryptopay: CryptoPay | None = None,
+    monobank: Monobank | None = None,
     fragment: FragmentClient | None = None,
     sender=None,
 ) -> dict:
+    if pay == "card":
+        return _card_status(invoice_id, monobank=monobank, fragment=fragment, sender=sender)
+    if pay not in {"", "cryptobot"}:
+        raise ShopError("bad_pay", "Этот способ оплаты ещё не подключён.", 400)
     require_purchases()
     text = str(invoice_id).strip()
     if not text.isdigit() or len(text) > 20:
@@ -165,6 +195,51 @@ def cryptobot_webhook(raw: bytes, signature: str, *, cryptopay: CryptoPay | None
     client = cryptopay or CryptoPay(token, base_url=_crypto_base())
     fresh = client.get_invoice(str(payload["invoice_id"]))
     return settle(fresh, token, fragment=fragment)
+
+
+def monobank_webhook(
+    raw: bytes,
+    signature: str,
+    *,
+    monobank: Monobank | None = None,
+    pubkey: bytes | None = None,
+    fragment: FragmentClient | None = None,
+    sender=None,
+) -> dict:
+    token = _require_card()
+    client = monobank or Monobank(token)
+    pem = pubkey if pubkey is not None else client.public_key()
+    if isinstance(pem, str):
+        pem = pem.encode()
+    if not signature or not verify_sign(pem, signature, raw):
+        raise ShopError("unauthorized", "Подпись Monobank не сходится.", 401)
+    try:
+        update = json.loads(raw.decode())
+    except json.JSONDecodeError as exc:
+        raise ShopError("bad_json", "Тело запроса должно быть JSON.", 400) from exc
+    if not isinstance(update, dict):
+        raise ShopError("bad_invoice", "В уведомлении нет счёта.", 400)
+    invoice_id = update.get("invoiceId")
+    if not isinstance(invoice_id, str) or not re.fullmatch(CARD_ID, invoice_id):
+        raise ShopError("bad_invoice", "В уведомлении нет счёта.", 400)
+    return settle_card(client.get_invoice(invoice_id), token, fragment=fragment, sender=sender)
+
+
+def settle_card(invoice: dict, token: str, *, fragment: FragmentClient | None = None, sender=None) -> dict:
+    invoice_id = invoice.get("invoiceId") or invoice.get("invoice_id")
+    status = str(invoice.get("status") or "")
+    if status != "success":
+        return _card_waiting(invoice_id, status, invoice)
+    order = _verified_order({"payload": invoice.get("reference")}, token)
+    if "minor" not in order or "ccy" not in order:
+        raise ShopError("bad_invoice", "Счёт без суммы карты.", 409)
+    amount = _whole(invoice.get("amount"))
+    ccy = _whole(invoice.get("ccy"))
+    final = invoice.get("finalAmount")
+    final_amount = amount if final in (None, "") else _whole(final)
+    if amount != order["minor"] or ccy != order["ccy"] or final_amount != amount:
+        raise ShopError("amount_mismatch", "Сумма счёта не совпала с ценой. Покупка не отправлена.", 409)
+    return _deliver(order, invoice_id, fragment, sender=sender, prefix="monobank")
 
 
 def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None, sender=None) -> dict:
@@ -216,18 +291,22 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
     path = path.rstrip("/") or "/"
     try:
         if method == "GET" and path == "/api/invoice":
-            invoice_id = (parse_qs(query).get("id") or [""])[0]
-            return 200, invoice_status(invoice_id)
+            params = parse_qs(query)
+            invoice_id = (params.get("id") or [""])[0]
+            pay = (params.get("pay") or ["cryptobot"])[0]
+            if pay not in {"", "cryptobot", "card"}:
+                return 400, {"error": "bad_pay", "message": "Этот способ оплаты ещё не подключён."}
+            return 200, invoice_status(invoice_id, pay=pay or "cryptobot")
         if method == "GET" and path == "/api/sync":
             return 200, deliver_paid_invoices()
         if method == "POST" and path == "/api/invoice":
             body = json.loads(raw.decode() or "{}")
             return 201, create_invoice(body)
         if method == "POST" and path == "/api/cryptobot":
-            signature = ""
-            if hasattr(headers, "get"):
-                signature = headers.get("crypto-pay-api-signature") or ""
+            signature = _header(headers, "crypto-pay-api-signature")
             return 200, cryptobot_webhook(raw, signature)
+        if method == "POST" and path == "/api/monobank":
+            return 200, monobank_webhook(raw, _header(headers, "x-sign"))
         return 404, {"error": "not_found", "message": "Неизвестный адрес."}
     except ShopError as exc:
         return exc.status, {"error": exc.code, "message": exc.message}
@@ -235,7 +314,122 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
         return 400, {"error": "bad_json", "message": "Тело запроса должно быть JSON."}
 
 
-def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, sender=None) -> dict:
+def _header(headers, name: str) -> str:
+    if not hasattr(headers, "get"):
+        return ""
+    titled = "-".join(part.capitalize() for part in name.split("-"))
+    for candidate in (name, name.lower(), name.upper(), titled):
+        value = headers.get(candidate)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _order_with_buyer(body: dict) -> dict:
+    order = parse_order(body)
+    init_data = body.get("init_data") if isinstance(body.get("init_data"), str) else ""
+    buyer = webapp_user_id(init_data, telegram_bot_token())
+    if buyer:
+        order["buyer_id"] = buyer
+    return order
+
+
+def _created(invoice_id: object, pay_url: str, status: str, order: dict, description: str) -> dict:
+    return {
+        "invoice_id": invoice_id,
+        "pay_url": pay_url,
+        "status": status,
+        "total": order["total"],
+        "label": description,
+        "kind": order["kind"],
+        "recipient": order["recipient"],
+        "amount": order.get("amount"),
+        "months": order.get("months"),
+    }
+
+
+def _require_card() -> str:
+    if os.environ.get("SHOP_MODE", "").strip().lower() == "dry-run":
+        raise ShopError(
+            "purchases_off",
+            "Оплата выключена: в настройках стоит SHOP_MODE=dry-run. Уберите её или поставьте live.",
+            503,
+        )
+    token = monobank_token()
+    if not token:
+        raise ShopError(
+            "purchases_off",
+            "Оплата картой пока не готова: в настройках магазина нет токена Monobank. Назовите его MONOBANK_TOKEN.",
+            503,
+        )
+    if not fragment_api_token():
+        raise ShopError("purchases_off", "Оплата пока не готова: в настройках магазина нет ключа Fragment.", 503)
+    return token
+
+
+def _card_status(invoice_id: object, *, monobank: Monobank | None, fragment: FragmentClient | None, sender) -> dict:
+    token = _require_card()
+    text = str(invoice_id).strip()
+    if not re.fullmatch(CARD_ID, text):
+        raise ShopError("bad_request", "Неизвестный счёт.", 400)
+    client = monobank or Monobank(token)
+    return settle_card(client.get_invoice(text), token, fragment=fragment, sender=sender)
+
+
+def _card_amount(total: str, rate: Decimal | None) -> tuple[int, int, str]:
+    ccy = card_currency()
+    if ccy == 840:
+        minor = int(_cents(total) * 100)
+        return 840, minor, f"{_cents(total):.2f} USD"
+    rate = nbu_usd_rate() if rate is None else rate
+    if not isinstance(rate, Decimal):
+        rate = Decimal(str(rate))
+    if rate <= 0 or rate > Decimal("1000"):
+        raise ShopError("rate_unavailable", "Не удалось узнать курс доллара. Оплата картой сейчас недоступна.", 503)
+    uah = (_cents(total) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    minor = int(uah * 100)
+    if minor <= 0:
+        raise ShopError("bad_amount", "Сумма к оплате получилась нулевой.", 500)
+    return 980, minor, f"{uah:.2f} UAH"
+
+
+def _card_waiting(invoice_id: object, status: str, invoice: dict) -> dict:
+    if status == "created":
+        message = "Оплатите картой. После оплаты покупка уйдёт сама."
+        try:
+            message = (
+                "Оплатите картой. Сумма "
+                + _charge_text(_whole(invoice.get("amount")), _whole(invoice.get("ccy")))
+                + ". После оплаты покупка уйдёт сама."
+            )
+        except ShopError:
+            pass
+    else:
+        message = {
+            "processing": "Банк ещё проводит оплату.",
+            "hold": "Банк удерживает оплату. Жду подтверждение.",
+            "failure": "Банк отклонил оплату.",
+            "reversed": "Оплата возвращена. Покупка не отправлена.",
+            "expired": "Счёт истёк. Нажмите карту ещё раз.",
+        }.get(status, "Жду ответ банка.")
+    retry = status in {"created", "processing", "hold"} or status not in {"failure", "reversed", "expired"}
+    return {
+        "invoice_id": invoice_id,
+        "status": status or "created",
+        "paid": False,
+        "delivered": False,
+        "retry": retry,
+        "message": message,
+    }
+
+
+def _charge_text(minor: int, ccy: int) -> str:
+    amount = (Decimal(minor) / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    code = {980: "UAH", 840: "USD"}.get(ccy, str(ccy))
+    return f"{amount:.2f} {code}"
+
+
+def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, sender=None, prefix: str = "cryptopay") -> dict:
     client = fragment or FragmentClient(fragment_api_token(), _fragment_base())
     try:
         if order["kind"] == "stars":
@@ -246,7 +440,7 @@ def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, s
         return _delivery_error(order, invoice_id, exc)
     remote = None
     for wallet in _wallet_order():
-        key = f"cryptopay-{invoice_id}" if wallet == _wallet() else f"cryptopay-{invoice_id}-{wallet}"
+        key = f"{prefix}-{invoice_id}" if wallet == _wallet() else f"{prefix}-{invoice_id}-{wallet}"
         try:
             if order["kind"] == "stars":
                 remote = client.create_stars(
@@ -338,6 +532,10 @@ def _verified_order(invoice: dict, token: str) -> dict:
     order = parse_order(fields)
     if fields.get("buyer_id") is not None:
         order["buyer_id"] = _whole(fields["buyer_id"])
+    if fields.get("minor") not in (None, ""):
+        order["minor"] = _whole(fields["minor"])
+    if fields.get("ccy") not in (None, ""):
+        order["ccy"] = _whole(fields["ccy"])
     if _cents(fields.get("total")) != _cents(order["total"]):
         raise ShopError("bad_invoice", "Цена в счёте не сходится.", 409)
     return order
@@ -351,6 +549,10 @@ def _signed_fields(order: dict) -> dict:
         fields["months"] = order["months"]
     if order.get("buyer_id"):
         fields["buyer_id"] = order["buyer_id"]
+    if order.get("minor") not in (None, ""):
+        fields["minor"] = order["minor"]
+    if order.get("ccy") not in (None, ""):
+        fields["ccy"] = order["ccy"]
     return fields
 
 
@@ -372,6 +574,10 @@ def _canonical(fields: dict) -> dict:
         raise ShopError("bad_product", "Выберите звёзды или Premium.", 400)
     if fields.get("buyer_id") not in (None, ""):
         data["buyer_id"] = _whole(fields["buyer_id"])
+    if fields.get("minor") not in (None, ""):
+        data["minor"] = _whole(fields["minor"])
+    if fields.get("ccy") not in (None, ""):
+        data["ccy"] = _whole(fields["ccy"])
     return data
 
 
