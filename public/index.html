@@ -426,7 +426,7 @@
       <p class="label" id="section">Количество</p>
       <div id="choices"></div>
       <label class="custom" id="customLabel">Другое количество
-        <input class="field" id="custom" inputmode="numeric" placeholder="от 50 до 100 000" autocomplete="off">
+        <input class="field" id="custom" inputmode="numeric" enterkeyhint="done" placeholder="от 50 до 100 000" autocomplete="off">
       </label>
     </div>
     <section id="paywall" hidden>
@@ -814,6 +814,17 @@
       render();
     });
     custom.addEventListener("focus", () => keepVisible(customLabel));
+    custom.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") custom.blur();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      const active = document.activeElement;
+      if (!active || active.tagName !== "INPUT") return;
+      if (event.target === active || active.contains(event.target)) return;
+      const label = event.target.closest && event.target.closest("label");
+      if (label && label.contains(active)) return;
+      active.blur();
+    });
     custom.addEventListener("input", () => {
       state.custom = custom.value;
       note.textContent = "";
