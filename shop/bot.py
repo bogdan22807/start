@@ -5,11 +5,14 @@ import re
 import time
 
 from shop.errors import ShopError
+from shop.stats import is_admin, load_state, pack_snapshot, remember_user
 from shop.telegram_api import TelegramApi
 from shop.tokens import telegram_bot_token
 
 BUY_STARS = "Купить звезды"
+STAT_BUTTON = "Статистика"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
+_ADMIN_COMMANDS: set[int] = set()
 
 
 def welcome_text(name: str) -> str:
@@ -29,17 +32,37 @@ class ShopBot:
     def handle(self, update: dict) -> None:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
-        if "id" not in chat:
+        if "id" not in chat or chat.get("type") not in (None, "private"):
             return
+        user = message.get("from") if isinstance(message.get("from"), dict) else {}
+        _remember(user)
+        chat_id = int(chat["id"])
+        if is_admin(user) and chat_id not in _ADMIN_COMMANDS:
+            setter = getattr(self.api, "set_admin_commands", None)
+            if setter:
+                try:
+                    setter(chat_id)
+                except ShopError:
+                    pass
+                else:
+                    _ADMIN_COMMANDS.add(chat_id)
         text = message.get("text") or ""
         command, _rest = _command(text)
+        if command == "/stat":
+            if not is_admin(user):
+                return
+            self.api.send_message(
+                chat_id,
+                "Статистика\n\nПользователи, заказы и сумма за 1, 3, 7, 30 дней и за всё время.",
+                open_button=(STAT_BUTTON, admin_url(self.app_url)),
+            )
+            return
         if command != "/start":
             return
-        user = message.get("from") or {}
         raw_name = user.get("first_name") if isinstance(user.get("first_name"), str) else ""
         link = main_menu_link(self.api)
         self.api.send_message(
-            int(chat["id"]),
+            chat_id,
             welcome_text(raw_name),
             link_button=(BUY_STARS, link) if link else None,
         )
@@ -86,6 +109,29 @@ def main_menu_link(api) -> str:
     if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
         return f"https://t.me/{username}?startapp"
     return ""
+
+
+def admin_url(app_url: str) -> str:
+    base = app_url.rstrip("/") + "/admin.html"
+    token = telegram_bot_token()
+    if not token:
+        return base
+    try:
+        users, orders = load_state()
+        packed = pack_snapshot(users, orders, token)
+    except Exception:
+        return base
+    if not packed:
+        return base
+    return base + "?s=" + packed
+
+
+def _remember(user: dict) -> None:
+    try:
+        username = user.get("username") if isinstance(user.get("username"), str) else ""
+        remember_user(user.get("id"), username)
+    except Exception:
+        return
 
 
 def webapp_url() -> str:

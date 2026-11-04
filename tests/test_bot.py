@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,7 @@ class MemoryApi:
     def __init__(self):
         self.sent = []
         self.answered = []
+        self.admin_commands = []
 
     def send_message(
         self,
@@ -44,6 +46,9 @@ class MemoryApi:
     def get_me(self):
         return {"username": "TraffyStarsBot"}
 
+    def set_admin_commands(self, chat_id):
+        self.admin_commands.append(chat_id)
+
 
 class TokenTests(unittest.TestCase):
     def test_botfather_token_in_api_token_starts_the_bot(self):
@@ -66,8 +71,18 @@ class TokenTests(unittest.TestCase):
 
 class BotTests(unittest.TestCase):
     def setUp(self):
+        self.stats_dir = tempfile.TemporaryDirectory()
+        self.saved_stats = os.environ.get("STATS_DB")
+        os.environ["STATS_DB"] = str(Path(self.stats_dir.name) / "stats.sqlite")
         self.api = MemoryApi()
         self.bot = ShopBot(self.api, "https://shop.example")
+
+    def tearDown(self):
+        if self.saved_stats is None:
+            os.environ.pop("STATS_DB", None)
+        else:
+            os.environ["STATS_DB"] = self.saved_stats
+        self.stats_dir.cleanup()
 
     def test_start_greets_by_name_and_opens_the_shop(self):
         self.bot.handle(_message(10, "/start", first_name="Богдан"))
@@ -89,6 +104,22 @@ class BotTests(unittest.TestCase):
         sent = self.api.sent[-1]
         self.assertEqual(sent["link_button"], ("Купить звезды", "https://t.me/TraffyStarsBot?startapp"))
         self.assertIsNone(sent["app_button"])
+
+    def test_stat_is_silent_for_everyone_except_the_admin(self):
+        self.bot.handle(_message(10, "/stat", username="alexdev"))
+        self.bot.handle(_message(10, "/stat@ShopBot", username="buyer"))
+        self.assertEqual(self.api.sent, [])
+        self.assertEqual(self.api.admin_commands, [])
+
+    def test_stat_opens_the_admin_panel_for_bogdan(self):
+        self.bot.handle(_message(10, "/stat", username="Bogdan22807", first_name="Богдан"))
+        sent = self.api.sent[-1]
+        self.assertIn("1, 3, 7, 30 дней", sent["text"])
+        self.assertEqual(sent["open_button"][0], "Статистика")
+        self.assertTrue(sent["open_button"][1].startswith("https://shop.example/admin.html"))
+        self.assertEqual(self.api.admin_commands, [10])
+        self.bot.handle(_message(10, "/start", username="@Bogdan22807", first_name="Богдан"))
+        self.assertEqual(self.api.sent[-1]["link_button"][0], "Купить звезды")
 
     def test_other_messages_do_nothing(self):
         for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет"):
@@ -151,6 +182,20 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("мир", folded)
         self.assertNotIn("сбп", folded)
         self.assertNotIn("способ оплаты", folded)
+        self.assertNotIn("admin.html", page)
+        admin = Path(__file__).parents[1].joinpath("public/admin.html").read_text(encoding="utf-8")
+        folded_admin = admin.lower()
+        self.assertIn("статистика", folded_admin)
+        self.assertIn("1 день", admin)
+        self.assertIn("3 дня", admin)
+        self.assertIn("7 дней", admin)
+        self.assertIn("30 дней", admin)
+        self.assertIn("Всё", admin)
+        self.assertIn("/api/stat", admin)
+        self.assertIn("#1b86ee", folded_admin)
+        self.assertIn("#face13", folded_admin)
+        self.assertIn("#000000", folded_admin)
+        self.assertIn("<svg", folded_admin)
 
 
 def _message(user_id, text, username="buyer", first_name="Покупатель"):

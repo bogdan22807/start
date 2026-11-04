@@ -101,6 +101,18 @@ class TelegramApi:
             },
         )
 
+    def set_admin_commands(self, chat_id: int) -> None:
+        self._call(
+            "setMyCommands",
+            {
+                "scope": {"type": "chat", "chat_id": chat_id},
+                "commands": [
+                    {"command": "start", "description": "Купить звезды"},
+                    {"command": "stat", "description": "Статистика"},
+                ],
+            },
+        )
+
     def _call(self, method: str, payload: dict, timeout: int = 20):
         if not self.token:
             raise ShopError("missing_bot_token", "Для бота в Telegram нужен BOT_TOKEN от @BotFather.", 503)

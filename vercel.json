@@ -3,6 +3,9 @@
   "installCommand": "",
   "buildCommand": "mkdir -p .vercel-out && cp -R public/. .vercel-out/",
   "outputDirectory": ".vercel-out",
+  "rewrites": [
+    {"source": "/admin", "destination": "/admin.html"}
+  ],
   "functions": {
     "api/**/*.py": {
       "includeFiles": "shop/**"

@@ -24,7 +24,7 @@ from shop.monobank import card_currency, monobank_token, nbu_usd_rate, verify_si
 from shop.receipt import send_receipt
 from shop.tokens import fragment_api_token, telegram_bot_token
 from shop.username import normalize_username
-from shop.webapp import webapp_user_id
+from shop.webapp import webapp_profile
 
 _STAR_PRICES = {
     50: "0.94",
@@ -130,6 +130,7 @@ def _create_crypto(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     pay_url = invoice.get("mini_app_invoice_url") or invoice.get("bot_invoice_url") or invoice.get("web_app_invoice_url")
     if not isinstance(pay_url, str) or not pay_url.startswith("https://"):
         raise ShopError("cryptopay_rejected", "Crypto Bot не дал ссылку на оплату.", 502)
+    _note_invoice(invoice["invoice_id"], order, "cryptobot", paid=False)
     return _created(invoice["invoice_id"], pay_url, invoice.get("status") or "active", order, description)
 
 
@@ -153,6 +154,7 @@ def _create_card(body: dict, *, monobank: Monobank | None = None, rate: Decimal 
     created = _created(invoice["invoiceId"], invoice["pageUrl"], "created", order, description)
     created["pay"] = "card"
     created["charge"] = charge
+    _note_invoice(invoice["invoiceId"], order, "card", paid=False)
     return created
 
 
@@ -239,6 +241,7 @@ def settle_card(invoice: dict, token: str, *, fragment: FragmentClient | None = 
     final_amount = amount if final in (None, "") else _whole(final)
     if amount != order["minor"] or ccy != order["ccy"] or final_amount != amount:
         raise ShopError("amount_mismatch", "Сумма счёта не совпала с ценой. Покупка не отправлена.", 409)
+    _note_invoice(invoice_id, order, "card", paid=True)
     return _deliver(order, invoice_id, fragment, sender=sender, prefix="monobank")
 
 
@@ -258,6 +261,7 @@ def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None,
     order = _verified_order(invoice, token)
     if str(invoice.get("asset") or "") != "USDT" or _cents(invoice.get("amount")) != _cents(order["total"]):
         raise ShopError("amount_mismatch", "Сумма счёта не совпала с ценой. Покупка не отправлена.", 409)
+    _note_invoice(invoice_id, order, "cryptobot", paid=True)
     return _deliver(order, invoice_id, fragment, sender=sender)
 
 
@@ -307,6 +311,9 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
             return 200, cryptobot_webhook(raw, signature)
         if method == "POST" and path == "/api/monobank":
             return 200, monobank_webhook(raw, _header(headers, "x-sign"))
+        if method == "POST" and path == "/api/stat":
+            body = json.loads(raw.decode() or "{}")
+            return stat_response(body)
         return 404, {"error": "not_found", "message": "Неизвестный адрес."}
     except ShopError as exc:
         return exc.status, {"error": exc.code, "message": exc.message}
@@ -328,10 +335,70 @@ def _header(headers, name: str) -> str:
 def _order_with_buyer(body: dict) -> dict:
     order = parse_order(body)
     init_data = body.get("init_data") if isinstance(body.get("init_data"), str) else ""
-    buyer = webapp_user_id(init_data, telegram_bot_token())
-    if buyer:
-        order["buyer_id"] = buyer
+    profile = webapp_profile(init_data, telegram_bot_token())
+    if profile:
+        order["buyer_id"] = profile["id"]
+        order["buyer_username"] = profile["username"]
     return order
+
+
+def _note_invoice(invoice_id: object, order: dict, source: str, *, paid: bool) -> None:
+    try:
+        from shop.stats import remember_invoice, remember_user
+
+        if order.get("buyer_id"):
+            remember_user(order.get("buyer_id"), order.get("buyer_username") or "")
+        remember_invoice(invoice_id, user_id=order.get("buyer_id"), amount=order.get("total"), source=source, paid=paid)
+    except Exception:
+        return
+
+
+def stat_response(body: dict) -> tuple[int, dict]:
+    from shop.stats import build_report, is_admin, load_state, unpack_snapshot
+
+    if not isinstance(body, dict):
+        raise ShopError("bad_request", "JSON должен быть объектом.", 400)
+    token = telegram_bot_token()
+    if not token:
+        raise ShopError("missing_bot_token", "Для статистики нужен токен бота.", 503)
+    init_data = body.get("init_data") if isinstance(body.get("init_data"), str) else ""
+    profile = webapp_profile(init_data, token)
+    if not is_admin(profile):
+        raise ShopError("forbidden", "Эта панель только для администратора.", 403)
+    snapshot = None
+    packed = body.get("snapshot") if isinstance(body.get("snapshot"), str) else ""
+    if packed:
+        snapshot = unpack_snapshot(packed, token)
+        if snapshot is None:
+            raise ShopError("bad_snapshot", "Снимок статистики не сходится.", 400)
+    users, orders = load_state()
+    crypto: list[dict] = []
+    crypto_token = os.environ.get("CRYPTO_PAY_TOKEN", "").strip()
+    if crypto_token:
+        try:
+            crypto = _crypto_history(CryptoPay(crypto_token, base_url=_crypto_base()))
+        except ShopError:
+            crypto = []
+    return 200, build_report(users, orders, crypto=crypto, snapshot=snapshot)
+
+
+def _crypto_history(client: CryptoPay) -> list[dict]:
+    found: list[dict] = []
+    seen: set[str] = set()
+    offset = 0
+    while len(found) < 2000:
+        page = client.list_invoices(count=100, offset=offset)
+        if not page:
+            break
+        marker = str(page[0].get("invoice_id"))
+        if marker in seen:
+            break
+        seen.add(marker)
+        found.extend(page)
+        if len(page) < 100:
+            break
+        offset += len(page)
+    return found[:2000]
 
 
 def _created(invoice_id: object, pay_url: str, status: str, order: dict, description: str) -> dict:

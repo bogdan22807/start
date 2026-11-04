@@ -55,8 +55,10 @@ def purchase_env(**extra):
         "MONOBANK_API_KEY",
         "MONOBANK_API_TOKEN",
         "MONOBANK_CCY",
+        "STATS_DB",
     }
     saved = {key: os.environ.get(key) for key in keys}
+    stats_dir = tempfile.TemporaryDirectory()
     try:
         for key in keys:
             os.environ.pop(key, None)
@@ -68,8 +70,11 @@ def purchase_env(**extra):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+        if not os.environ.get("STATS_DB"):
+            os.environ["STATS_DB"] = str(Path(stats_dir.name) / "stats.sqlite")
         yield
     finally:
+        stats_dir.cleanup()
         for key, value in saved.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -120,7 +125,7 @@ class RecordingPay:
             raise ShopError("invoice_not_found", "Счёт Crypto Bot не найден.", 404)
         return dict(self.invoice)
 
-    def list_invoices(self, *, status=None, count=100):
+    def list_invoices(self, *, status=None, count=100, offset=0):
         if self.invoice is None:
             return []
         if status and self.invoice.get("status") != status:

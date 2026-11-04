@@ -103,8 +103,10 @@ class CryptoPay:
             raise ShopError("cryptopay_rejected", "Crypto Bot не вернул счёт.", 502)
         return result
 
-    def list_invoices(self, *, status: str | None = None, count: int = 100) -> list:
+    def list_invoices(self, *, status: str | None = None, count: int = 100, offset: int = 0) -> list:
         body: dict = {"count": count}
+        if offset:
+            body["offset"] = offset
         if status:
             body["status"] = status
         result = self._call("getInvoices", body)

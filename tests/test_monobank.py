@@ -76,8 +76,10 @@ def purchase_env(**extra):
         "MONOBANK_API_KEY",
         "MONOBANK_API_TOKEN",
         "MONOBANK_CCY",
+        "STATS_DB",
     }
     saved = {key: os.environ.get(key) for key in keys}
+    stats_dir = tempfile.TemporaryDirectory()
     try:
         for key in keys:
             os.environ.pop(key, None)
@@ -90,8 +92,11 @@ def purchase_env(**extra):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+        if not os.environ.get("STATS_DB"):
+            os.environ["STATS_DB"] = str(Path(stats_dir.name) / "stats.sqlite")
         yield
     finally:
+        stats_dir.cleanup()
         for key, value in saved.items():
             if value is None:
                 os.environ.pop(key, None)
