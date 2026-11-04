@@ -3,7 +3,7 @@ from pathlib import Path
 
 import os
 
-from shop.bot import ShopBot, webapp_url
+from shop.bot import ShopBot, webapp_url, welcome_text
 from shop.tokens import fragment_api_token, telegram_bot_token
 
 
@@ -12,7 +12,7 @@ class MemoryApi:
         self.sent = []
         self.answered = []
 
-    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None, app_button=None):
+    def send_message(self, chat_id, text, buttons=None, keyboard=None, placeholder=None, app_button=None, link_button=None):
         self.sent.append(
             {
                 "chat_id": chat_id,
@@ -21,6 +21,7 @@ class MemoryApi:
                 "keyboard": keyboard,
                 "placeholder": placeholder,
                 "app_button": app_button,
+                "link_button": link_button,
             }
         )
 
@@ -52,18 +53,24 @@ class BotTests(unittest.TestCase):
         self.api = MemoryApi()
         self.bot = ShopBot(self.api, "https://shop.example")
 
-    def test_start_shows_the_shop_button(self):
-        self.bot.handle(_message(10, "/start"))
+    def test_start_greets_by_name_and_links_the_shop(self):
+        self.bot.handle(_message(10, "/start", first_name="Богдан"))
         sent = self.api.sent[-1]
-        self.assertIn("магазин", sent["text"].lower())
-        self.assertIn("Открыть магазин", sent["text"])
-        self.assertEqual(sent["app_button"], ("Открыть магазин", "https://shop.example"))
+        self.assertEqual(sent["text"], welcome_text("Богдан"))
+        self.assertIn("🌟 Добро пожаловать, Богдан", sent["text"])
+        self.assertIn("кнопки ниже", sent["text"])
+        self.assertEqual(sent["link_button"], ("Купить звезды", "https://shop.example"))
+        self.assertIsNone(sent["app_button"])
         self.assertIsNone(sent["keyboard"])
-        self.assertIsNone(sent["buttons"])
+        self.assertNotIn("Открыть магазин", sent["text"])
+
+    def test_start_without_a_name_uses_a_fallback(self):
+        self.bot.handle(_message(10, "/start", first_name=""))
+        self.assertIn("Добро пожаловать, друг", self.api.sent[-1]["text"])
 
     def test_start_at_mention_uses_the_same_button(self):
-        self.bot.handle(_message(10, "/start@ShopBot"))
-        self.assertEqual(self.api.sent[-1]["app_button"][0], "Открыть магазин")
+        self.bot.handle(_message(10, "/start@ShopBot", first_name="Анна"))
+        self.assertEqual(self.api.sent[-1]["link_button"][0], "Купить звезды")
 
     def test_other_messages_do_nothing(self):
         for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет"):
@@ -106,13 +113,14 @@ class BotTests(unittest.TestCase):
         self.assertIn("#face13", folded)
         self.assertIn("<svg", folded)
         self.assertIn("@keyframes", folded)
-        self.assertIn("оплатить", folded)
+        self.assertIn("оплата heleket временно недоступна", folded)
+        self.assertNotIn("открыть магазин", folded)
         self.assertNotIn("сбп", folded)
         self.assertNotIn("способ оплаты", folded)
 
 
-def _message(user_id, text, username="buyer"):
-    user = {"id": user_id}
+def _message(user_id, text, username="buyer", first_name="Покупатель"):
+    user = {"id": user_id, "first_name": first_name}
     if username:
         user["username"] = username
     return {

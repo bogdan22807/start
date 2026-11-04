@@ -169,7 +169,7 @@
     .card:nth-child(5) { animation-delay: .16s; }
     .card:nth-child(6) { animation-delay: .2s; }
     .card { min-height: 84px; padding: 14px 6px 12px; text-align: center; }
-    .card:active, .plan:active, #pay:active:not(:disabled) { transform: scale(0.97); }
+    .card:active, .plan:active { transform: scale(0.97); }
     .card.on, .plan.on {
       border-color: var(--blue);
       box-shadow: 0 8px 20px rgba(27, 134, 238, 0.12);
@@ -215,51 +215,17 @@
     }
     .due strong { font-weight: 760; letter-spacing: -0.03em; }
     .due strong.tick { animation: pop .35s cubic-bezier(.2, .8, .2, 1); }
-    #pay {
-      position: relative;
-      overflow: hidden;
-      width: 100%;
-      height: 54px;
+    .hold {
+      margin: 0;
+      padding: 16px 14px;
       border-radius: 16px;
-      background: var(--blue);
-      color: #fff;
-      font-size: 17px;
-      font-weight: 700;
-      box-shadow: 0 10px 22px rgba(27, 134, 238, 0.28);
-    }
-    #pay::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.38) 50%, transparent 68%);
-      transform: translateX(-130%);
-      animation: shine 3.4s ease-in-out infinite;
-    }
-    #pay:disabled {
-      background: #E6E6E8;
-      color: #A0A0A4;
-      box-shadow: none;
-    }
-    #pay:disabled::after { display: none; }
-    .burst { position: relative; height: 0; }
-    .burst i {
-      position: absolute;
-      left: 50%;
-      top: 8px;
-      width: 10px;
-      height: 10px;
-      background: var(--gold);
-      clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-      animation: fly .75s ease-out forwards;
-    }
-    .note {
-      min-height: 0;
-      margin: 10px 0 0;
-      color: var(--muted);
-      font-size: 13px;
+      background: #fff;
+      color: #111;
       text-align: center;
+      font-size: 16px;
+      font-weight: 700;
+      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.06);
     }
-    .note.show { animation: rise .35s both; }
     @keyframes rise {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: none; }
@@ -276,13 +242,6 @@
       0% { transform: scale(.92); }
       55% { transform: scale(1.06); }
       100% { transform: scale(1); }
-    }
-    @keyframes shine {
-      0%, 55% { transform: translateX(-130%); }
-      100% { transform: translateX(130%); }
-    }
-    @keyframes fly {
-      to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -330,9 +289,7 @@
     </div>
     <div class="checkout">
       <div class="due"><span>К оплате</span><strong id="due">18.75 USDT</strong></div>
-      <div class="burst" id="burst"></div>
-      <button type="button" id="pay">Оплатить 18.75 USDT</button>
-      <p class="note" id="note"></p>
+      <p class="hold">Оплата Heleket временно недоступна</p>
     </div>
   </main>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -374,8 +331,6 @@
     const customLabel = document.getElementById("customLabel");
     const custom = document.getElementById("custom");
     const due = document.getElementById("due");
-    const pay = document.getElementById("pay");
-    const note = document.getElementById("note");
     const stage = document.getElementById("stage");
     let shownProduct = "";
     let shownWho = "";
@@ -491,8 +446,6 @@
         void due.offsetWidth;
         due.classList.add("tick");
       }
-      pay.textContent = "Оплатить " + total;
-      pay.disabled = !picked.ok;
     }
 
     function renderRecipient() {
@@ -505,11 +458,7 @@
         field.id = "friendName";
         field.placeholder = "@username";
         field.autocomplete = "off";
-        field.addEventListener("input", () => {
-          note.textContent = "";
-          note.classList.remove("show");
-          updatePay();
-        });
+        field.addEventListener("input", updatePay);
         recipient.appendChild(field);
         return;
       }
@@ -564,8 +513,6 @@
           button.append(icon("gem", "ico"), copy, sum);
           button.addEventListener("click", () => {
             state.months = plan.months;
-            note.textContent = "";
-            note.classList.remove("show");
             paintSelection();
             updatePay();
           });
@@ -590,8 +537,6 @@
           state.pack = pack.amount;
           state.custom = "";
           custom.value = "";
-          note.textContent = "";
-          note.classList.remove("show");
           paintSelection();
           updatePay();
         });
@@ -614,48 +559,22 @@
       return months === 3 ? "месяца" : "месяцев";
     }
 
-    function burst() {
-      const layer = document.getElementById("burst");
-      layer.replaceChildren();
-      for (let index = 0; index < 9; index += 1) {
-        const bit = document.createElement("i");
-        const angle = (Math.PI * 2 * index) / 9;
-        bit.style.setProperty("--x", Math.cos(angle) * (54 + (index % 3) * 14) + "px");
-        bit.style.setProperty("--y", (Math.sin(angle) * 28 - 46) + "px");
-        bit.style.setProperty("--r", (index * 28) + "deg");
-        layer.appendChild(bit);
-      }
-    }
-
     document.getElementById("product").addEventListener("click", (event) => {
       const button = event.target.closest("button");
       if (!button) return;
       state.product = button.dataset.product;
-      note.textContent = "";
-      note.classList.remove("show");
       render();
     });
     document.getElementById("who").addEventListener("click", (event) => {
       const button = event.target.closest("button");
       if (!button) return;
       state.who = button.dataset.who;
-      note.textContent = "";
-      note.classList.remove("show");
       render();
     });
     custom.addEventListener("input", () => {
       state.custom = custom.value;
-      note.textContent = "";
-      note.classList.remove("show");
       paintSelection();
       updatePay();
-    });
-    pay.addEventListener("click", () => {
-      const picked = selection();
-      if (!picked.ok) return;
-      note.textContent = "Выбрано: " + picked.label + " для @" + picked.recipient + ". Оплата пока не списывается.";
-      note.classList.add("show");
-      burst();
     });
     render();
   </script>
