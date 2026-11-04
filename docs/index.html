@@ -1,239 +1,499 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="light">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#f7f8fa">
+  <meta name="theme-color" content="#FFFAF6">
   <title>Магазин</title>
   <style>
-    :root, [data-theme="light"] {
-      --bg: #f7f8fa;
-      --card: #ffffff;
-      --line: #e4e7ec;
-      --text: #1c1e21;
-      --muted: #8b919a;
-      --dim: #b0b6be;
-      --accent: #2AABEE;
-      --star: #FFCC00;
-      --pill: #eef1f4;
-      --footer-line: #e6e8ec;
+    :root {
+      --bg: #FFFAF6;
+      --card: #fff;
+      --line: #E6E6E6;
+      --text: #111111;
+      --muted: #8E8E93;
+      --label: #9A948E;
+      --blue: #1B86EE;
+      --gold: #FACE13;
+      --fade: rgba(255, 250, 246, 0);
+      --idle: #4A4A4E;
+      --placeholder: #C5C5C7;
+      --avatar: #E3E3E5;
+      --pay-off: #E6E6E8;
+      --pay-off-text: #A0A0A4;
     }
-    [data-theme="dark"] {
+    html[data-theme="dark"] {
+      color-scheme: dark;
       --bg: #000000;
       --card: #161616;
-      --line: #2a2a2a;
-      --text: #ffffff;
-      --muted: #8f8f8f;
-      --dim: #5c5c5c;
-      --accent: #2AABEE;
-      --star: #FFCC00;
-      --pill: #1c1c1c;
-      --footer-line: #1c1c1c;
-      color-scheme: dark;
+      --line: #2c2c2e;
+      --text: #f4f4f5;
+      --muted: #a1a1a6;
+      --label: #8e8e93;
+      --fade: rgba(0, 0, 0, 0);
+      --idle: #d0d0d4;
+      --placeholder: #6e6e72;
+      --avatar: #2a2a2e;
+      --pay-off: #2a2a2e;
+      --pay-off-text: #6e6e72;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; background: var(--bg); color: var(--text); }
     body {
       min-height: 100dvh;
-      font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      accent-color: #2AABEE;
+      font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
-    button, input { font: inherit; color: inherit; background: none; border: 0; }
-    main { padding: 18px 16px 28px; }
-    .bar { display: flex; gap: 8px; align-items: center; }
-    .switch, .who {
+    button, input { font: inherit; color: inherit; }
+    button { background: none; border: 0; cursor: pointer; }
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .app {
+      width: min(100%, 440px);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: 14px 16px calc(22px + env(safe-area-inset-bottom));
+      background:
+        radial-gradient(140px 90px at 16% 78px, rgba(250, 206, 19, 0.22), transparent 72%),
+        var(--bg);
+    }
+    body.premium .app {
+      background:
+        radial-gradient(140px 90px at 16% 78px, rgba(27, 134, 238, 0.16), transparent 72%),
+        var(--bg);
+    }
+    .switch {
+      position: relative;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px;
       padding: 4px;
-      background: var(--pill);
-      border-radius: 14px;
-    }
-    .switch { flex: 1; }
-    .switch button, .who button, #theme {
-      height: 40px;
-      border-radius: 11px;
-      color: var(--muted);
-    }
-    .switch button.on, .who button.on { background: var(--accent); color: #fff; font-weight: 600; }
-    #theme {
-      width: 44px;
       background: var(--card);
-      border: 1px solid var(--line);
-      color: var(--text);
-      font-size: 18px;
+      border-radius: 18px;
+      box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
     }
-    h1, h2 {
+    .pill {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 4px;
+      width: calc(50% - 4px);
+      border-radius: 14px;
+      background: var(--blue);
+      transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+    }
+    .switch.alt .pill { transform: translateX(100%); }
+    .top { display: flex; align-items: center; gap: 10px; }
+    .top .switch { flex: 1; }
+    #theme {
+      width: 50px;
+      height: 50px;
+      flex: none;
+      border-radius: 18px;
+      background: var(--card);
+      box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
+      font-size: 22px;
+    }
+    .switch button {
+      position: relative;
+      z-index: 1;
+      height: 42px;
+      border-radius: 14px;
+      color: var(--idle);
+      font-weight: 650;
+    }
+    .switch button.on { color: #fff; }
+    .hero {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin: 22px 0;
-      font-size: 28px;
-      font-weight: 650;
-      letter-spacing: -0.03em;
+      margin: 16px 0 2px;
     }
-    h2 { font-size: 24px; }
-    .mark {
-      width: 42px;
-      height: 42px;
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 760;
+      letter-spacing: -0.04em;
+    }
+    .badge {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      flex: none;
       display: grid;
       place-items: center;
-      border-radius: 12px;
-      border: 1px solid var(--line);
+      border-radius: 15px;
       background: var(--card);
-      font-size: 22px;
+      box-shadow: 0 8px 18px rgba(196, 156, 40, 0.16), 0 0 0 1px rgba(17, 17, 17, 0.04);
     }
-    .mark.star { color: var(--star); }
-    .mark.pay { color: var(--accent); }
+    body.premium .badge { box-shadow: 0 8px 18px rgba(27, 134, 238, 0.16), 0 0 0 1px rgba(17, 17, 17, 0.04); }
+    .badge-ico { width: 30px; height: 30px; animation: float 2.8s ease-in-out infinite; }
+    .spark {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      background: var(--gold);
+      clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+      animation: spark 2.2s ease-in-out infinite;
+    }
+    body.premium .spark { background: #7EBAFF; }
+    .s1 { top: -3px; right: -3px; }
+    .s2 { left: -4px; bottom: 1px; width: 5px; height: 5px; animation-delay: .7s; }
     .label {
-      margin: 22px 0 8px;
-      color: var(--muted);
+      margin: 18px 2px 8px;
+      color: var(--label);
       font-size: 12px;
+      font-weight: 650;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
-    .profile, .field, .card, .plan, .method {
+    .who { margin-top: 2px; }
+    .profile, .field, .card, .plan {
       background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
+      border: 2px solid transparent;
+      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
     }
-    .profile { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding: 12px 14px; }
+    .profile {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      animation: rise .4s both;
+    }
     .avatar {
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
+      flex: none;
       border-radius: 50%;
       display: grid;
       place-items: center;
-      background: var(--pill);
-      color: var(--accent);
-      font-weight: 650;
+      overflow: hidden;
+      background: var(--avatar);
+      color: #3A3A3C;
+      font-weight: 700;
     }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .name { font-weight: 680; }
     .handle, .sub, .price { color: var(--muted); }
     .handle, .sub { font-size: 14px; }
-    .field { width: 100%; margin-top: 12px; padding: 16px; }
-    .field:focus { outline: none; border-color: var(--accent); }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .card { min-height: 86px; padding: 14px 6px; text-align: center; }
-    .card .qty { font-size: 18px; font-weight: 650; }
-    .card .star { color: var(--star); }
-    .card .price { margin-top: 4px; font-size: 13px; }
-    .card.on, .plan.on { border-color: var(--accent); }
-    .plan, .method {
+    .field {
+      width: 100%;
+      margin-top: 12px;
+      padding: 16px 16px;
+      border-radius: 18px;
+      border: 2px solid transparent;
+      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
+    }
+    .field::placeholder { color: var(--placeholder); }
+    .field:focus { outline: none; border-color: var(--blue); box-shadow: none; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .plans { display: grid; gap: 10px; }
+    .card, .plan {
+      border-radius: 18px;
+      transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+      animation: rise .42s both;
+    }
+    .card:nth-child(2), .plan:nth-child(2) { animation-delay: .04s; }
+    .card:nth-child(3), .plan:nth-child(3) { animation-delay: .08s; }
+    .card:nth-child(4) { animation-delay: .12s; }
+    .card:nth-child(5) { animation-delay: .16s; }
+    .card:nth-child(6) { animation-delay: .2s; }
+    .card { min-height: 84px; padding: 14px 6px 12px; text-align: center; }
+    .card:active, .plan:active, #pay:active:not(:disabled) { transform: scale(0.97); }
+    .card.on, .plan.on {
+      border-color: var(--blue);
+      box-shadow: 0 8px 20px rgba(27, 134, 238, 0.12);
+    }
+    .qty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 18px;
+      font-weight: 760;
+      letter-spacing: -0.03em;
+    }
+    .card .ico { width: 16px; height: 16px; }
+    .card.on .ico { animation: pop .4s cubic-bezier(.2, .8, .2, 1); }
+    .price { margin-top: 6px; font-size: 13px; }
+    .plan {
       width: 100%;
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 8px;
       padding: 14px 16px;
       text-align: left;
     }
-    .radio {
-      width: 18px;
-      height: 18px;
-      flex: none;
-      border: 1.5px solid var(--accent);
-      border-radius: 50%;
-    }
-    .plan.on .radio { background: var(--accent); box-shadow: inset 0 0 0 4px var(--card); }
-    .plan .name, .method .name { font-weight: 600; }
-    .plan .sum { margin-left: auto; text-align: right; font-weight: 650; }
-    .custom { display: block; margin-top: 16px; color: var(--muted); font-size: 14px; }
+    .plan .ico { width: 28px; height: 28px; flex: none; }
+    .plan .name { display: block; font-weight: 700; }
+    .plan .sum { margin-left: auto; font-weight: 760; letter-spacing: -0.03em; }
+    .custom { display: block; margin-top: 12px; color: var(--muted); font-size: 15px; }
     [hidden] { display: none !important; }
-    .back { color: var(--accent); font-weight: 600; padding: 0; }
-    footer {
+    .checkout {
       position: sticky;
       bottom: 0;
-      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
-      background: var(--bg);
-      border-top: 1px solid var(--footer-line);
+      margin: 8px -16px 0;
+      padding: 8px 16px 4px;
+      background: linear-gradient(to top, var(--bg) 78%, var(--fade));
     }
-    .due { display: flex; justify-content: space-between; margin-bottom: 10px; }
-    .due span { color: var(--muted); }
+    .due {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 8px 2px 12px;
+      font-size: 16px;
+    }
+    .due strong { font-weight: 760; letter-spacing: -0.03em; }
+    .due strong.tick { animation: pop .35s cubic-bezier(.2, .8, .2, 1); }
     #pay {
+      position: relative;
+      overflow: hidden;
       width: 100%;
-      height: 52px;
+      height: 54px;
       border-radius: 16px;
-      background: var(--accent);
+      background: var(--blue);
       color: #fff;
-      font-weight: 650;
+      font-size: 17px;
+      font-weight: 700;
+      box-shadow: 0 10px 22px rgba(27, 134, 238, 0.28);
     }
-    #pay:disabled { background: var(--pill); color: var(--dim); }
-    .note { min-height: 18px; margin: 8px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
+    #pay::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.38) 50%, transparent 68%);
+      transform: translateX(-130%);
+      animation: shine 3.4s ease-in-out infinite;
+    }
+    #pay:disabled {
+      background: var(--pay-off);
+      color: var(--pay-off-text);
+      box-shadow: none;
+    }
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 40px;
+      padding: 0 4px;
+      color: var(--blue);
+      font-weight: 700;
+    }
+    .method {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 2px solid transparent;
+      background: var(--card);
+      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
+      text-align: left;
+    }
+    .method .ico { width: 28px; height: 28px; flex: none; }
+    .method .name { display: block; font-weight: 700; }
+    .method .sub { display: block; }
+    .method.on {
+      border-color: var(--blue);
+      box-shadow: 0 8px 20px rgba(27, 134, 238, 0.12);
+    }
+    #paywall .label:first-of-type { margin-top: 8px; }
+    .summary {
+      margin: 14px 2px 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    #pay:disabled::after { display: none; }
+    .burst { position: relative; height: 0; }
+    .burst i {
+      position: absolute;
+      left: 50%;
+      top: 8px;
+      width: 10px;
+      height: 10px;
+      background: var(--gold);
+      clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      animation: fly .75s ease-out forwards;
+    }
+    .note {
+      min-height: 0;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    .note.show { animation: rise .35s both; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+      50% { transform: translateY(-2px) rotate(-8deg) scale(1.08); }
+    }
+    @keyframes spark {
+      0%, 100% { opacity: .35; transform: scale(.7) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+    }
+    @keyframes pop {
+      0% { transform: scale(.92); }
+      55% { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
+    @keyframes shine {
+      0%, 55% { transform: translateX(-130%); }
+      100% { transform: translateX(130%); }
+    }
+    @keyframes fly {
+      to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
   </style>
 </head>
 <body>
-  <main id="shop">
-    <div class="bar">
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="star" viewBox="0 0 64 64">
+      <path fill="#FACE13" d="M32 4.2 39.6 20.8 57.4 22.6 44.2 34.4 48 51.8 32 43.2 16 51.8 19.8 34.4 6.6 22.6 24.4 20.8Z"/>
+      <path fill="#fff" fill-opacity=".5" d="M32 12.2 35.2 19.4 37.4 19.8 33.2 23.8 34.2 26.4 32 24.6 29.8 26.4 30.6 23.6 26.8 20.2 29.4 19.6Z"/>
+    </symbol>
+    <symbol id="gem" viewBox="0 0 64 64">
+      <path fill="#1B86EE" d="M32 6 54 26 32 58 10 26Z"/>
+      <path fill="#fff" fill-opacity=".72" d="M32 6 44 26 32 18 20 26Z"/>
+      <path fill="#0E5EAE" fill-opacity=".35" d="M32 58 10 26h22Z"/>
+    </symbol>
+    <symbol id="card" viewBox="0 0 64 64">
+      <rect x="6" y="14" width="52" height="36" rx="8" fill="#1B86EE"/>
+      <rect x="6" y="24" width="52" height="8" fill="#0E5EAE"/>
+      <rect x="14" y="38" width="16" height="6" rx="2" fill="#fff" fill-opacity=".85"/>
+    </symbol>
+    <symbol id="coin" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="22" fill="#FACE13"/>
+      <circle cx="32" cy="32" r="14" fill="none" stroke="#fff" stroke-width="3" stroke-opacity=".75"/>
+    </symbol>
+    <symbol id="hex" viewBox="0 0 64 64">
+      <path fill="#1B86EE" d="M32 6 54 18.5v27L32 58 10 45.5v-27Z"/>
+      <path fill="#fff" fill-opacity=".55" d="M32 16 44 23v14L32 44 20 37V23Z"/>
+    </symbol>
+  </svg>
+  <main class="app" id="app">
+    <div class="top">
       <div class="switch" id="product">
+        <span class="pill"></span>
         <button type="button" data-product="stars" class="on">Звёзды</button>
         <button type="button" data-product="premium">Premium</button>
       </div>
       <button type="button" id="theme" aria-label="Сменить тему">☾</button>
     </div>
-    <h1 id="title"></h1>
-    <p class="label">Получатель</p>
-    <div class="who" id="who">
-      <button type="button" data-who="self" class="on">Себе</button>
-      <button type="button" data-who="friend">Другу</button>
+    <header class="hero">
+      <div class="badge" id="badge"></div>
+      <h1 id="title">Telegram Stars</h1>
+    </header>
+    <div id="stage">
+      <p class="label">Получатель</p>
+      <div class="switch who" id="who">
+        <span class="pill"></span>
+        <button type="button" data-who="self" class="on">Себе</button>
+        <button type="button" data-who="friend">Другу</button>
+      </div>
+      <div id="recipient"></div>
+      <p class="label" id="section">Количество</p>
+      <div id="choices"></div>
+      <label class="custom" id="customLabel">Другое количество
+        <input class="field" id="custom" inputmode="numeric" placeholder="от 50 до 100 000" autocomplete="off">
+      </label>
     </div>
-    <div id="recipient"></div>
-    <p class="label" id="section"></p>
-    <div id="choices"></div>
-    <label class="custom" id="customLabel">Другое количество
-      <input class="field" id="custom" inputmode="numeric" placeholder="от 50 до 100 000" autocomplete="off">
-    </label>
+    <section id="paywall" hidden>
+      <button type="button" class="back" id="back">← Назад</button>
+      <p class="summary" id="summary"></p>
+      <p class="label">Банковская карта</p>
+      <button type="button" class="method" data-pay="card">
+        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#card"></use></svg>
+        <span><span class="name">Банковская карта</span><span class="sub">Visa, Mastercard, МИР</span></span>
+      </button>
+      <p class="label">Криптой</p>
+      <button type="button" class="method" data-pay="cryptobot">
+        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#coin"></use></svg>
+        <span><span class="name">Crypto Bot</span><span class="sub">Оплата в криптоботе</span></span>
+      </button>
+      <button type="button" class="method" data-pay="heleket">
+        <svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#hex"></use></svg>
+        <span><span class="name">Heleket</span><span class="sub">Оплата криптой</span></span>
+      </button>
+      <p class="note" id="paynote"></p>
+    </section>
+    <div class="checkout">
+      <div class="due"><span>К оплате</span><strong id="due">18.75 USDT</strong></div>
+      <div class="burst" id="burst"></div>
+      <button type="button" id="pay">Оплатить 18.75 USDT</button>
+      <p class="note" id="note"></p>
+    </div>
   </main>
-  <main id="paywall" hidden>
-    <button type="button" class="back" id="payBack">← Назад</button>
-    <h2><span class="mark pay">₽</span> Оплата</h2>
-    <p class="label">Банковская карта</p>
-    <button type="button" class="method" data-pay="card"><span class="mark pay">▣</span><span class="name">Банковская карта</span></button>
-    <p class="label">Криптой</p>
-    <button type="button" class="method" data-pay="cryptobot"><span class="mark pay">✈</span><span class="name">Crypto Bot</span></button>
-    <button type="button" class="method" data-pay="heleket"><span class="mark pay">◈</span><span class="name">Heleket</span></button>
-    <p class="note" id="payNote"></p>
-  </main>
-  <footer>
-    <div class="due"><span>К оплате</span><strong id="due">0.00 USDT</strong></div>
-    <button type="button" id="pay">Оплатить</button>
-  </footer>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     const PACKS = [
-      [50, "0.94"],
-      [100, "1.88"],
-      [250, "4.69"],
-      [500, "9.38"],
-      [1000, "18.75"],
-      [2500, "46.88"]
+      { amount: 50, price: "0.94" },
+      { amount: 100, price: "1.88" },
+      { amount: 250, price: "4.69" },
+      { amount: 500, price: "9.38" },
+      { amount: 1000, price: "18.75" },
+      { amount: 2500, price: "46.88" }
     ];
     const PLANS = [
-      [3, "14.99", "5.00"],
-      [6, "19.99", "3.33"],
-      [12, "36.24", "3.02"]
+      { months: 3, total: "14.99", per: "5.00" },
+      { months: 6, total: "19.99", per: "3.33" },
+      { months: 12, total: "36.24", per: "3.02" }
     ];
-    const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
     const STAR_MIN = 50;
     const STAR_MAX = 100000;
-
-    const state = {
-      product: location.hash === "#premium" ? "premium" : "stars",
-      who: "self",
-      pack: 1000,
-      months: 12,
-      custom: "",
-      theme: "light"
-    };
+    const state = { product: "stars", who: "self", pack: 1000, months: 12, custom: "" };
     const tg = window.Telegram && window.Telegram.WebApp;
     const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
+
+    const THEME_KEY = "shop-theme";
+    const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
+
+    function paintChrome(color) {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", color);
+      if (!tg) return;
+      ["setHeaderColor", "setBackgroundColor", "setBottomBarColor"].forEach((name) => {
+        if (typeof tg[name] === "function") {
+          try { tg[name](color); } catch (error) {}
+        }
+      });
+    }
+
+    function applyTheme(theme) {
+      const dark = theme === "dark";
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      const themeButton = document.getElementById("theme");
+      themeButton.textContent = dark ? "☀" : "☾";
+      themeButton.setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
+      paintChrome(dark ? "#000000" : "#FFFAF6");
+      try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (error) {}
+    }
 
     if (tg) {
       tg.ready();
       tg.expand();
     }
+    let savedTheme = "light";
+    try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch (error) {}
+    applyTheme(savedTheme);
 
     const title = document.getElementById("title");
+    const badge = document.getElementById("badge");
     const section = document.getElementById("section");
     const choices = document.getElementById("choices");
     const recipient = document.getElementById("recipient");
@@ -241,44 +501,43 @@
     const custom = document.getElementById("custom");
     const due = document.getElementById("due");
     const pay = document.getElementById("pay");
-    const shop = document.getElementById("shop");
+    const note = document.getElementById("note");
+    const stage = document.getElementById("stage");
+    const checkout = document.querySelector(".checkout");
     const paywall = document.getElementById("paywall");
-    const themeButton = document.getElementById("theme");
+    const summary = document.getElementById("summary");
+    const paynote = document.getElementById("paynote");
+    let shownProduct = "";
+    let shownWho = "";
+
+    function icon(id, className) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", className);
+      svg.setAttribute("viewBox", "0 0 64 64");
+      svg.setAttribute("aria-hidden", "true");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#" + id);
+      svg.appendChild(use);
+      return svg;
+    }
 
     function money(cents) {
       return (cents / 100).toFixed(2);
     }
 
+    function formatQty(amount) {
+      return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+
     function starCents(amount) {
-      const known = PACKS.find((pack) => pack[0] === amount);
-      if (known) return Math.round(Number(known[1]) * 100);
+      const known = PACKS.find((pack) => pack.amount === amount);
+      if (known) return Math.round(Number(known.price) * 100);
       return Math.round(amount * 1.875);
     }
 
-    function selection() {
-      const name = (state.who === "self" ? user.username : customFriend()) || "";
-      if (state.product === "premium") {
-        const plan = PLANS.find((item) => item[0] === state.months);
-        return {
-          ok: Boolean(name),
-          kind: "premium",
-          recipient: name,
-          months: plan[0],
-          total: plan[1],
-          label: "Premium на " + plan[0] + " мес."
-        };
-      }
-      const amount = currentAmount();
-      const cents = starCents(amount);
-      const valid = amount >= STAR_MIN && amount <= STAR_MAX;
-      return {
-        ok: Boolean(name) && valid,
-        kind: "stars",
-        recipient: name,
-        amount: amount,
-        total: money(cents),
-        label: amount + " звёзд"
-      };
+    function friendName() {
+      const field = document.getElementById("friendName");
+      return field ? field.value.trim().replace(/^@/, "") : "";
     }
 
     function currentAmount() {
@@ -289,177 +548,283 @@
       return state.pack;
     }
 
-    function customFriend() {
-      return document.getElementById("friendName") ? document.getElementById("friendName").value.trim().replace(/^@/, "") : "";
+    function selection() {
+      const name = (state.who === "self" ? user.username : friendName()) || "";
+      if (state.product === "premium") {
+        const plan = PLANS.find((item) => item.months === state.months) || PLANS[0];
+        return {
+          ok: Boolean(name),
+          kind: "premium",
+          recipient: name,
+          months: plan.months,
+          total: plan.total,
+          label: "Premium на " + plan.months + " мес."
+        };
+      }
+      const amount = currentAmount();
+      const valid = amount >= STAR_MIN && amount <= STAR_MAX;
+      const known = PACKS.find((pack) => pack.amount === amount);
+      return {
+        ok: Boolean(name) && valid,
+        kind: "stars",
+        recipient: name,
+        amount: amount,
+        total: known ? known.price : money(starCents(amount)),
+        label: formatQty(amount) + " звёзд"
+      };
     }
 
-    function applyTheme() {
-      document.documentElement.dataset.theme = state.theme;
-      const dark = state.theme === "dark";
-      themeButton.textContent = dark ? "☀" : "☾";
-      const color = dark ? "#000000" : "#f7f8fa";
-      const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute("content", color);
-      document.querySelector('meta[name="color-scheme"]').setAttribute("content", dark ? "dark" : "light");
-      if (!tg) return;
-      try { tg.setHeaderColor(color); } catch (error) {}
-      try { tg.setBackgroundColor(color); } catch (error) {}
-      if (tg.setBottomBarColor) {
-        try { tg.setBottomBarColor(color); } catch (error) {}
-      }
+    function setSwitch(id, key, value) {
+      const root = document.getElementById(id);
+      let second = false;
+      root.querySelectorAll("button").forEach((button) => {
+        const on = button.dataset[key] === value;
+        button.classList.toggle("on", on);
+        if (on && button !== root.querySelector("button")) second = true;
+      });
+      root.classList.toggle("alt", second);
     }
 
     function render() {
       const stars = state.product === "stars";
-      title.innerHTML = stars
-        ? '<span class="mark star">★</span> Telegram Stars'
-        : '<span class="mark pay">♛</span> Telegram Premium';
+      document.body.classList.toggle("premium", !stars);
+      title.textContent = stars ? "Telegram Stars" : "Telegram Premium";
       section.textContent = stars ? "Количество" : "Срок";
       customLabel.hidden = !stars;
-      document.querySelectorAll("#product button").forEach((button) => {
-        button.classList.toggle("on", button.dataset.product === state.product);
-      });
-      document.querySelectorAll("#who button").forEach((button) => {
-        button.classList.toggle("on", button.dataset.who === state.who);
-      });
+      setSwitch("product", "product", state.product);
+      setSwitch("who", "who", state.who);
       renderRecipient();
-      renderChoices();
+      if (shownProduct !== state.product) {
+        shownProduct = state.product;
+        badge.replaceChildren(icon(stars ? "star" : "gem", "badge-ico"));
+        const first = document.createElement("i");
+        const second = document.createElement("i");
+        first.className = "spark s1";
+        second.className = "spark s2";
+        badge.append(first, second);
+        renderChoices();
+        stage.classList.remove("playing");
+        void stage.offsetWidth;
+        stage.classList.add("playing");
+      } else {
+        paintSelection();
+      }
       updatePay();
     }
 
     function updatePay() {
       const picked = selection();
       const total = picked.total + " USDT";
-      due.textContent = total;
+      if (due.textContent !== total) {
+        due.textContent = total;
+        due.classList.remove("tick");
+        void due.offsetWidth;
+        due.classList.add("tick");
+      }
       pay.textContent = "Оплатить " + total;
       pay.disabled = !picked.ok;
     }
-
-    let shownWho = "";
 
     function renderRecipient() {
       if (state.who === "friend") {
         if (shownWho === "friend" && document.getElementById("friendName")) return;
         shownWho = "friend";
-        recipient.innerHTML = '<input class="field" id="friendName" placeholder="@username" autocomplete="off">';
-        document.getElementById("friendName").addEventListener("input", updatePay);
+        recipient.replaceChildren();
+        const field = document.createElement("input");
+        field.className = "field";
+        field.id = "friendName";
+        field.placeholder = "@username";
+        field.autocomplete = "off";
+        field.addEventListener("input", () => {
+          note.textContent = "";
+          note.classList.remove("show");
+          updatePay();
+        });
+        recipient.appendChild(field);
         return;
       }
       shownWho = "self";
+      const visible = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Вы";
       const nick = user.username ? "@" + user.username : "без username";
-      const visible = user.first_name || "Вы";
-      const letter = visible.slice(0, 1).toUpperCase();
-      recipient.innerHTML =
-        '<div class="profile"><div class="avatar"></div><div><div class="name"></div><div class="handle"></div></div></div>';
-      recipient.querySelector(".avatar").textContent = letter;
-      recipient.querySelector(".name").textContent = visible;
-      recipient.querySelector(".handle").textContent = nick;
+      recipient.replaceChildren();
+      const card = document.createElement("div");
+      card.className = "profile";
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      if (user.photo_url) {
+        const photo = document.createElement("img");
+        photo.src = user.photo_url;
+        photo.alt = "";
+        avatar.appendChild(photo);
+      } else {
+        avatar.textContent = visible.slice(0, 1).toUpperCase();
+      }
+      const copy = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = visible;
+      const handle = document.createElement("div");
+      handle.className = "handle";
+      handle.textContent = nick;
+      copy.append(name, handle);
+      card.append(avatar, copy);
+      recipient.appendChild(card);
     }
 
     function renderChoices() {
       choices.replaceChildren();
+      choices.className = state.product === "stars" ? "grid" : "plans";
       if (state.product === "premium") {
         PLANS.forEach((plan) => {
           const button = document.createElement("button");
           button.type = "button";
-          button.className = "plan" + (plan[0] === state.months ? " on" : "");
-          button.innerHTML =
-            '<span class="radio"></span><span><span class="name"></span><div class="sub"></div></span><span class="sum"></span>';
-          button.querySelector(".name").textContent = plan[0] + " " + monthWord(plan[0]);
-          button.querySelector(".sub").textContent = plan[2] + " USDT в месяц";
-          button.querySelector(".sum").textContent = plan[1] + " USDT";
+          button.className = "plan";
+          button.dataset.months = String(plan.months);
+          const copy = document.createElement("span");
+          const name = document.createElement("span");
+          name.className = "name";
+          name.textContent = plan.months + " " + monthWord(plan.months);
+          const sub = document.createElement("span");
+          sub.className = "sub";
+          sub.textContent = plan.per + " USDT в месяц";
+          copy.append(name, sub);
+          const sum = document.createElement("span");
+          sum.className = "sum";
+          sum.textContent = plan.total + " USDT";
+          button.append(icon("gem", "ico"), copy, sum);
           button.addEventListener("click", () => {
-            state.months = plan[0];
-            render();
+            state.months = plan.months;
+            note.textContent = "";
+            note.classList.remove("show");
+            paintSelection();
+            updatePay();
           });
           choices.appendChild(button);
         });
+        paintSelection();
         return;
       }
-      const grid = document.createElement("div");
-      grid.className = "grid";
-      const amount = state.custom.trim() ? 0 : state.pack;
       PACKS.forEach((pack) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "card" + (pack[0] === amount ? " on" : "");
-        button.innerHTML = '<div class="qty"></div><div class="price"></div>';
-        button.querySelector(".qty").innerHTML = '<span class="star">★</span> ' + pack[0].toLocaleString("ru-RU");
-        button.querySelector(".price").textContent = pack[1] + " USDT";
+        button.className = "card";
+        button.dataset.amount = String(pack.amount);
+        const qty = document.createElement("div");
+        qty.className = "qty";
+        qty.append(icon("star", "ico"), document.createTextNode(formatQty(pack.amount)));
+        const price = document.createElement("div");
+        price.className = "price";
+        price.textContent = pack.price + " USDT";
+        button.append(qty, price);
         button.addEventListener("click", () => {
-          state.pack = pack[0];
+          state.pack = pack.amount;
           state.custom = "";
           custom.value = "";
-          render();
+          note.textContent = "";
+          note.classList.remove("show");
+          paintSelection();
+          updatePay();
         });
-        grid.appendChild(button);
+        choices.appendChild(button);
       });
-      choices.appendChild(grid);
+      paintSelection();
+    }
+
+    function paintSelection() {
+      const amount = state.custom.trim() ? 0 : state.pack;
+      choices.querySelectorAll(".card").forEach((card) => {
+        card.classList.toggle("on", Number(card.dataset.amount) === amount);
+      });
+      choices.querySelectorAll(".plan").forEach((plan) => {
+        plan.classList.toggle("on", Number(plan.dataset.months) === state.months);
+      });
     }
 
     function monthWord(months) {
-      if (months === 3) return "месяца";
-      return "месяцев";
+      return months === 3 ? "месяца" : "месяцев";
     }
 
-    function showShop() {
-      shop.hidden = false;
-      paywall.hidden = true;
-      pay.hidden = false;
-      document.getElementById("payNote").textContent = "";
-    }
-
-    function showPay() {
-      const picked = selection();
-      if (!picked.ok) return;
-      shop.hidden = true;
-      paywall.hidden = false;
-      pay.hidden = true;
-    }
-
-    function sendChoice(method) {
-      const picked = selection();
-      if (!picked.ok) return;
-      picked.pay = method;
-      const payload = JSON.stringify(picked);
-      if (tg && typeof tg.sendData === "function") {
-        try {
-          tg.sendData(payload);
-          return;
-        } catch (error) {}
+    function burst() {
+      const layer = document.getElementById("burst");
+      layer.replaceChildren();
+      for (let index = 0; index < 9; index += 1) {
+        const bit = document.createElement("i");
+        const angle = (Math.PI * 2 * index) / 9;
+        bit.style.setProperty("--x", Math.cos(angle) * (54 + (index % 3) * 14) + "px");
+        bit.style.setProperty("--y", (Math.sin(angle) * 28 - 46) + "px");
+        bit.style.setProperty("--r", (index * 28) + "deg");
+        layer.appendChild(bit);
       }
-      document.getElementById("payNote").textContent =
-        "Выбрано: " + picked.label + " для @" + picked.recipient + ". " + PAY_NAMES[method] + ". Деньги не списываются.";
     }
 
-    themeButton.addEventListener("click", () => {
-      state.theme = state.theme === "dark" ? "light" : "dark";
-      applyTheme();
-    });
     document.getElementById("product").addEventListener("click", (event) => {
       const button = event.target.closest("button");
       if (!button) return;
       state.product = button.dataset.product;
+      note.textContent = "";
+      note.classList.remove("show");
       render();
     });
     document.getElementById("who").addEventListener("click", (event) => {
       const button = event.target.closest("button");
       if (!button) return;
       state.who = button.dataset.who;
+      note.textContent = "";
+      note.classList.remove("show");
       render();
     });
     custom.addEventListener("input", () => {
       state.custom = custom.value;
-      render();
+      note.textContent = "";
+      note.classList.remove("show");
+      paintSelection();
+      updatePay();
     });
-    pay.addEventListener("click", showPay);
-    document.getElementById("payBack").addEventListener("click", showShop);
+    function showShop() {
+      paywall.hidden = true;
+      stage.hidden = false;
+      checkout.hidden = false;
+      paynote.textContent = "";
+      paynote.classList.remove("show");
+      paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
+    }
+
+    pay.addEventListener("click", () => {
+      const picked = selection();
+      if (!picked.ok) return;
+      summary.textContent = picked.label + " для @" + picked.recipient + " · " + picked.total + " USDT";
+      paynote.textContent = "";
+      paynote.classList.remove("show");
+      paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
+      stage.hidden = true;
+      checkout.hidden = true;
+      paywall.hidden = false;
+      burst();
+    });
+    document.getElementById("back").addEventListener("click", showShop);
+    document.getElementById("theme").addEventListener("click", () => {
+      applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
     paywall.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-pay]");
+      const button = event.target.closest(".method");
       if (!button) return;
-      sendChoice(button.dataset.pay);
+      const picked = selection();
+      paywall.querySelectorAll(".method").forEach((item) => item.classList.toggle("on", item === button));
+      const name = PAY_NAMES[button.dataset.pay] || button.dataset.pay;
+      paynote.textContent = "Выбрано: " + name + ". Деньги не списываются.";
+      paynote.classList.add("show");
+      const payload = {
+        kind: picked.kind,
+        recipient: picked.recipient,
+        total: picked.total,
+        pay: button.dataset.pay
+      };
+      if (picked.kind === "premium") payload.months = picked.months;
+      else payload.amount = picked.amount;
+      if (tg && typeof tg.sendData === "function") {
+        try { tg.sendData(JSON.stringify(payload)); } catch (error) {}
+      }
     });
-    applyTheme();
     render();
   </script>
 </body>

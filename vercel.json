@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "mkdir -p .vercel-out && cp -R public/. .vercel-out/",
+  "outputDirectory": ".vercel-out"
+}

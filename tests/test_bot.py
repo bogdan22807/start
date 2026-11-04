@@ -1,13 +1,10 @@
-import tempfile
 import unittest
 from pathlib import Path
 
 import os
 
-from shop.bot import ShopBot
-from shop.orders import OrderStore
+from shop.bot import ShopBot, webapp_url
 from shop.tokens import fragment_api_token, telegram_bot_token
-from test_shop import make_shop
 
 
 class MemoryApi:
@@ -55,165 +52,75 @@ class TokenTests(unittest.TestCase):
 
 class BotTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.shop = make_shop(OrderStore(Path(self.tmp.name) / "orders.db"))
-        self.shop.create_order = self._order_is_not_created
         self.api = MemoryApi()
-        self.bot = ShopBot(self.shop, self.api, {7})
+        self.bot = ShopBot(self.api, "https://shop.example")
 
-    def tearDown(self):
-        self.shop.store.close()
-        self.tmp.cleanup()
-
-    def test_start_shows_stars_and_premium(self):
+    def test_start_removes_the_shop_button(self):
         self.bot.handle(_message(10, "/start"))
         sent = self.api.sent[-1]
-        self.assertEqual(
-            sent["keyboard"],
-            [
-                ["⭐ Купить Звёзды"],
-                ["🌟 Купить Premium"],
-                ["🧸 Купить Подарки"],
-                ["👥 Рефералы", "💎 Купить TON"],
-            ],
-        )
+        self.assertIn("магазин", sent["text"].lower())
+        self.assertNotIn("Открыть магазин", sent["text"])
+        self.assertIsNone(sent["app_button"])
+        self.assertTrue(sent["remove_keyboard"])
+        self.assertIsNone(sent["keyboard"])
         self.assertIsNone(sent["buttons"])
 
-    def test_stars_for_self_then_quantity_stops(self):
-        self.bot.handle(_message(20, "⭐ Купить Звёзды", username="alexdev"))
-        screen = self.api.sent[-1]
-        self.assertEqual(
-            screen["text"],
-            "🚀 Введите количество звёзд для покупки (от 50 ⭐ до 1000000 ⭐)\n\n👤 Получатель: @alexdev",
-        )
-        self.assertEqual(screen["keyboard"], [["🎁 Подарить звёзды"]])
+    def test_start_at_mention_uses_the_same_screen(self):
+        self.bot.handle(_message(10, "/start@ShopBot"))
+        sent = self.api.sent[-1]
+        self.assertIsNone(sent["app_button"])
+        self.assertTrue(sent["remove_keyboard"])
 
-        self.bot.handle(_message(20, "40", username="alexdev"))
-        self.assertIn("от 50 ⭐ до 1000000 ⭐", self.api.sent[-1]["text"])
-
-        self.bot.handle(_message(20, "50", username="alexdev"))
-        done = self.api.sent[-1]
-        self.assertEqual(
-            done["text"],
-            "⭐ Оплатите указ Сегодня эличество\nзвёзд\n\n☆ Количество: 50 ⭐\n👤 Получатель: @alexdev",
-        )
-        self.assertIsNone(done["buttons"])
-        self._assert_payment_is_left_out(done["text"])
-
-    def test_stars_for_friend_asks_for_a_nick(self):
-        self.bot.handle(_message(20, "⭐ Купить Звёзды", username="alexdev"))
-        self.bot.handle(_message(20, "🎁 Подарить звёзды", username="alexdev"))
-        self.assertEqual(self.api.sent[-1]["text"], "Напишите ник друга.")
-        self.bot.handle(_message(20, "@Friend_Name", username="alexdev"))
-        self.assertIn("👤 Получатель: @friend_name", self.api.sent[-1]["text"])
-        self.bot.handle(_message(20, "100", username="alexdev"))
-        done = self.api.sent[-1]
-        self.assertIn("☆ Количество: 100 ⭐", done["text"])
-        self.assertIn("👤 Получатель: @friend_name", done["text"])
-        self._assert_payment_is_left_out(done["text"])
-
-    def test_premium_repeats_the_same_steps(self):
-        self.bot.handle(_message(20, "🌟 Купить Premium", username="alexdev"))
-        screen = self.api.sent[-1]
-        self.assertEqual(screen["text"], "🌟 Выберите кому отправить Premium:")
-        self.assertEqual(
-            [(button[0], button[1]) for row in screen["buttons"] for button in row],
-            [("👤 На мой аккаунт", "p:self"), ("👥 На другой аккаунт", "p:other")],
-        )
-
-        self.bot.handle(_callback(20, "alexdev", "p:self"))
-        terms = self.api.sent[-1]
-        self.assertEqual(terms["text"], "🌟 Выберите срок подписки:")
-        self.assertEqual(
-            [row[0][0] for row in terms["buttons"]],
-            ["3 месяца - 1390₽", "6 месяцев - 1990₽", "12 месяцев - 3190₽", "↩️ Назад"],
-        )
-
-        self.bot.handle(_callback(20, "alexdev", "p:back"))
-        self.assertEqual(self.api.sent[-1]["text"], "🌟 Выберите кому отправить Premium:")
-
-        self.bot.handle(_callback(20, "alexdev", "p:other"))
-        ask = self.api.sent[-1]
-        self.assertEqual(
-            ask["text"],
-            "Введите @юзернейм аккаунта, на который нужно отправить Premium\n\n"
-            "Убедитесь что вводите юзернейм правильно.",
-        )
-        self.assertEqual(ask["buttons"], [[("↩️ Вернуться назад", "p:back")]])
-        self.bot.handle(_message(20, "buddy", username="alexdev"))
-        self.assertEqual(self.api.sent[-1]["text"], "🌟 Выберите срок подписки:")
-        self.bot.handle(_callback(20, "alexdev", "p:6"))
-        done = self.api.sent[-1]
-        self.assertEqual(done["text"], "6 месяцев - 1990₽\n👤 Получатель: @buddy")
-        self.assertIsNone(done["buttons"])
-        self._assert_payment_is_left_out(done["text"])
-
-    def test_self_without_username_asks_to_type_one(self):
-        self.bot.handle(_message(20, "⭐ Купить Звёзды", username=None))
-        self.assertIn("Напишите свой ник", self.api.sent[-1]["text"])
-        self.bot.handle(_message(20, "ownnick", username=None))
-        self.assertIn("👤 Получатель: @ownnick", self.api.sent[-1]["text"])
-
-    def test_web_app_choice_is_not_an_order(self):
-        self.bot.app_url = "https://example.com/app"
-        self.bot.handle(_message(10, "/start"))
-        self.assertIsNone(self.api.sent[-1]["app_button"])
-        self.assertTrue(self.api.sent[-1]["remove_keyboard"])
-        self.assertNotIn("Открыть магазин", self.api.sent[-1]["text"])
+    def test_other_messages_do_nothing(self):
+        for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет"):
+            self.bot.handle(_message(10, text, username="alexdev"))
+        self.bot.handle(_callback(10, "alexdev", "p:self"))
         self.bot.handle(
             {
                 "message": {
                     "chat": {"id": 10, "type": "private"},
                     "from": {"id": 10, "username": "alexdev"},
-                    "web_app_data": {"data": '{"kind":"stars","recipient":"alexdev","amount":1000,"total":"18.75"}'},
+                    "web_app_data": {"data": '{"kind":"stars","recipient":"alexdev","amount":1000}'},
                 }
             }
         )
-        done = self.api.sent[-1]
-        self.assertEqual(done["text"], "1000 звёзд для @alexdev.\nК оплате 18.75 USDT.")
-        self._assert_payment_is_left_out(done["text"])
-        self.bot.handle(
-            {
-                "message": {
-                    "chat": {"id": 10, "type": "private"},
-                    "from": {"id": 10},
-                    "web_app_data": {"data": '{"kind":"premium","recipient":"buddy","months":12,"total":"1.00"}'},
-                }
-            }
-        )
-        self.assertEqual(self.api.sent[-1]["text"], "Premium на 12 мес. для @buddy.\nК оплате 36.24 USDT.")
-        self.bot.handle(
-            {
-                "message": {
-                    "chat": {"id": 10, "type": "private"},
-                    "from": {"id": 10},
-                    "web_app_data": {
-                        "data": '{"kind":"stars","recipient":"alexdev","amount":50,"pay":"heleket"}'
-                    },
-                }
-            }
-        )
-        self.assertIn("Heleket", self.api.sent[-1]["text"])
-        self.assertIn("0.94 USDT", self.api.sent[-1]["text"])
+        self.assertEqual(self.api.sent, [])
+        self.assertEqual(self.api.answered, [])
 
-    def test_mini_app_keeps_the_chosen_colors(self):
-        page = Path(__file__).parents[1].joinpath("shop/webapp/index.html").read_text(encoding="utf-8")
-        self.assertIn("#2AABEE", page)
-        self.assertIn("#FFCC00", page)
-        self.assertIn("Банковская карта", page)
-        self.assertIn("Crypto Bot", page)
-        self.assertIn("Heleket", page)
+    def test_default_shop_url_is_the_vercel_app(self):
+        saved = os.environ.get("WEBAPP_URL")
+        try:
+            os.environ.pop("WEBAPP_URL", None)
+            self.assertEqual(webapp_url(), "https://start-bogdan22807s-projects.vercel.app")
+            os.environ["WEBAPP_URL"] = "https://example.com/shop"
+            self.assertEqual(webapp_url(), "https://example.com/shop")
+        finally:
+            if saved is None:
+                os.environ.pop("WEBAPP_URL", None)
+            else:
+                os.environ["WEBAPP_URL"] = saved
+
+    def test_mini_app_keeps_the_shop_and_adds_theme_and_payment(self):
+        page = Path(__file__).parents[1].joinpath("public/index.html").read_text(encoding="utf-8")
+        folded = page.lower()
+        self.assertIn("telegram stars", folded)
+        self.assertIn("18.75", page)
+        self.assertIn("36.24", page)
+        self.assertIn("14.99", page)
+        self.assertIn("#1b86ee", folded)
+        self.assertIn("#fffaf6", folded)
+        self.assertIn("#face13", folded)
+        self.assertIn("#000000", folded)
+        self.assertIn("<svg", folded)
+        self.assertIn("@keyframes", folded)
+        self.assertIn("оплатить", folded)
+        self.assertIn("банковская карта", folded)
+        self.assertIn("crypto bot", folded)
+        self.assertIn("heleket", folded)
         self.assertIn('id="theme"', page)
-
-    def _assert_payment_is_left_out(self, text: str) -> None:
-        lowered = text.lower()
-        self.assertNotIn("соглашаетесь", lowered)
-        self.assertNotIn("сбп", lowered)
-        self.assertNotIn("вывод", lowered)
-        self.assertNotIn("способ оплаты", lowered)
-
-    def _order_is_not_created(self, *args, **kwargs):
-        raise AssertionError("заказ создавать пока не нужно")
+        self.assertIn('data-theme="dark"', page)
+        self.assertNotIn("сбп", folded)
+        self.assertNotIn("способ оплаты", folded)
 
 
 def _message(user_id, text, username="buyer"):

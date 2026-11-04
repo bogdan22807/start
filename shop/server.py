@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-_WEB_ROOT = (Path(__file__).parent / "webapp").resolve()
+_WEB_ROOT = (Path(__file__).resolve().parents[1] / "public").resolve()
 
 from shop.config import load_shop
 from shop.errors import ShopError
@@ -137,7 +137,7 @@ class ShopHandler(BaseHTTPRequestHandler):
 
 
 def _web_page(path: str) -> Path | None:
-    if path in {"/app", "/app/"}:
+    if path in {"/", "/app", "/app/"}:
         relative = "index.html"
     elif path.startswith("/app/"):
         relative = path[len("/app/") :]
