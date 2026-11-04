@@ -51,7 +51,7 @@ class Shop:
             products.append(item)
         return {"currency": self.prices.currency, "markup_percent": markup, "products": products}
 
-    def create_order(self, product_id: object, recipient_username: object) -> Order:
+    def create_order(self, product_id: object, recipient_username: object, buyer_chat_id: int | None = None) -> Order:
         if isinstance(recipient_username, int) and not isinstance(recipient_username, bool):
             raise ShopError(
                 "bad_username",
@@ -79,6 +79,7 @@ class Shop:
             markup_percent=quote.markup_text,
             fragment_cost=quote.cost_text,
             customer_amount=quote.customer_text,
+            buyer_chat_id=buyer_chat_id,
         )
 
     def get_order(self, order_id: str) -> Order:
