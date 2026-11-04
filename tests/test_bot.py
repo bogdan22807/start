@@ -2,8 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import os
+
 from shop.bot import ShopBot
 from shop.orders import OrderStore
+from shop.tokens import fragment_api_token, telegram_bot_token
 from test_shop import make_shop
 
 
@@ -17,6 +20,25 @@ class MemoryApi:
 
     def answer_callback(self, callback_id):
         self.answered.append(callback_id)
+
+
+class TokenTests(unittest.TestCase):
+    def test_botfather_token_in_api_token_starts_the_bot(self):
+        saved = {key: os.environ.get(key) for key in ("BOT_TOKEN", "API_TOKEN", "FRAGMENT_API_KEY")}
+        try:
+            os.environ.pop("BOT_TOKEN", None)
+            os.environ.pop("FRAGMENT_API_KEY", None)
+            os.environ["API_TOKEN"] = "123456789:AAFakeTokenForTestsOnly0001"
+            self.assertEqual(telegram_bot_token(), os.environ["API_TOKEN"])
+            self.assertEqual(fragment_api_token(), "")
+            os.environ["BOT_TOKEN"] = "999:BBBBbbbbCCCCddddEEEEffffGGGGhhhhIII"
+            self.assertEqual(telegram_bot_token(), os.environ["BOT_TOKEN"])
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 class BotTests(unittest.TestCase):

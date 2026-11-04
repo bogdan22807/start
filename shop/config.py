@@ -8,6 +8,7 @@ from shop.fragment import PRODUCTION_BASE, FragmentClient
 from shop.orders import OrderStore
 from shop.pricing import PriceBook, costs_from_sources, format_percent, parse_decimal
 from shop.service import Shop
+from shop.tokens import fragment_api_token
 
 
 def load_shop(store: OrderStore) -> Shop:
@@ -30,7 +31,7 @@ def load_shop(store: OrderStore) -> Shop:
         if raw:
             premium_env[months] = _decimal_env(name, raw)
 
-    token = (os.environ.get("API_TOKEN") or os.environ.get("FRAGMENT_API_KEY") or "").strip()
+    token = fragment_api_token()
     base = os.environ.get("FRAGMENT_API_BASE", PRODUCTION_BASE).strip() or PRODUCTION_BASE
     client = FragmentClient(token, base)
     packages = None

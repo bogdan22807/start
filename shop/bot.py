@@ -9,6 +9,7 @@ from shop.errors import ShopError
 from shop.orders import OrderStore
 from shop.service import Shop
 from shop.telegram_api import TelegramApi
+from shop.tokens import telegram_bot_token
 from shop.username import normalize_username
 
 _STAR_MIN = 50
@@ -225,9 +226,12 @@ class ShopBot:
 
 
 def main() -> None:
-    token = os.environ.get("BOT_TOKEN", "").strip()
+    token = telegram_bot_token()
     if not token:
-        raise SystemExit("Для бота в Telegram нужен BOT_TOKEN от @BotFather.")
+        raise SystemExit(
+            "Бот не запущен, поэтому /start в Telegram никуда не доходит. "
+            "Нужен токен BotFather в BOT_TOKEN или в API_TOKEN (вид 123456789:AA...)."
+        )
     admin_ids = set()
     for part in os.environ.get("TELEGRAM_ADMIN_IDS", "").split(","):
         part = part.strip()
