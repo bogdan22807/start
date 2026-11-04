@@ -62,7 +62,8 @@ class BotTests(unittest.TestCase):
             sent["keyboard"],
             [
                 ["⭐ Купить Звёзды"],
-                ["☆ Купить Premium", "🧸 Купить Подарки"],
+                ["🌟 Купить Premium"],
+                ["🧸 Купить Подарки"],
                 ["👥 Рефералы", "💎 Купить TON"],
             ],
         )
@@ -102,24 +103,40 @@ class BotTests(unittest.TestCase):
         self._assert_payment_is_left_out(done["text"])
 
     def test_premium_repeats_the_same_steps(self):
-        self.bot.handle(_message(20, "☆ Купить Premium", username="alexdev"))
+        self.bot.handle(_message(20, "🌟 Купить Premium", username="alexdev"))
         screen = self.api.sent[-1]
-        self.assertIn("3, 6 или 12 месяцев", screen["text"])
-        self.assertIn("👤 Получатель: @alexdev", screen["text"])
-        self.assertEqual(screen["keyboard"][0], ["3 месяца", "6 месяцев", "12 месяцев"])
-        self.assertEqual(screen["keyboard"][1], ["🎁 Подарить Premium"])
+        self.assertEqual(screen["text"], "🌟 Выберите кому отправить Premium:")
+        self.assertEqual(
+            [(button[0], button[1]) for row in screen["buttons"] for button in row],
+            [("👤 На мой аккаунт", "p:self"), ("👥 На другой аккаунт", "p:other")],
+        )
 
-        self.bot.handle(_message(20, "🎁 Подарить Premium", username="alexdev"))
+        self.bot.handle(_callback(20, "alexdev", "p:self"))
+        terms = self.api.sent[-1]
+        self.assertEqual(terms["text"], "🌟 Выберите срок подписки:")
+        self.assertEqual(
+            [row[0][0] for row in terms["buttons"]],
+            ["3 месяца - 1390₽", "6 месяцев - 1990₽", "12 месяцев - 3190₽", "↩️ Назад"],
+        )
+
+        self.bot.handle(_callback(20, "alexdev", "p:back"))
+        self.assertEqual(self.api.sent[-1]["text"], "🌟 Выберите кому отправить Premium:")
+
+        self.bot.handle(_callback(20, "alexdev", "p:other"))
+        ask = self.api.sent[-1]
+        self.assertEqual(
+            ask["text"],
+            "Введите @юзернейм аккаунта, на который нужно отправить Premium\n\n"
+            "Убедитесь что вводите юзернейм правильно.",
+        )
+        self.assertEqual(ask["buttons"], [[("↩️ Вернуться назад", "p:back")]])
         self.bot.handle(_message(20, "buddy", username="alexdev"))
-        self.assertIn("👤 Получатель: @buddy", self.api.sent[-1]["text"])
-        self.bot.handle(_message(20, "6 месяцев", username="alexdev"))
+        self.assertEqual(self.api.sent[-1]["text"], "🌟 Выберите срок подписки:")
+        self.bot.handle(_callback(20, "alexdev", "p:6"))
         done = self.api.sent[-1]
-        self.assertEqual(done["text"], "☆ Срок: 6 мес.\n👤 Получатель: @buddy")
+        self.assertEqual(done["text"], "6 месяцев - 1990₽\n👤 Получатель: @buddy")
+        self.assertIsNone(done["buttons"])
         self._assert_payment_is_left_out(done["text"])
-
-        self.bot.handle(_message(20, "☆ Купить Premium", username="alexdev"))
-        self.bot.handle(_message(20, "12", username="alexdev"))
-        self.assertEqual(self.api.sent[-1]["text"], "☆ Срок: 12 мес.\n👤 Получатель: @alexdev")
 
     def test_self_without_username_asks_to_type_one(self):
         self.bot.handle(_message(20, "⭐ Купить Звёзды", username=None))

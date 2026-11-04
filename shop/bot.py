@@ -14,22 +14,26 @@ from shop.username import normalize_username
 
 _STAR_MIN = 50
 _STAR_MAX = 1_000_000
-_PREMIUM_MONTHS = (3, 6, 12)
 
 BUY_STARS = "⭐ Купить Звёзды"
-BUY_PREMIUM = "☆ Купить Premium"
+BUY_PREMIUM = "🌟 Купить Premium"
 BUY_GIFTS = "🧸 Купить Подарки"
 REFERRALS = "👥 Рефералы"
 BUY_TON = "💎 Купить TON"
 GIFT_STARS = "🎁 Подарить звёзды"
-GIFT_PREMIUM = "🎁 Подарить Premium"
 
 _MENU = [
     [BUY_STARS],
-    [BUY_PREMIUM, BUY_GIFTS],
+    [BUY_PREMIUM],
+    [BUY_GIFTS],
     [REFERRALS, BUY_TON],
 ]
-_MONTH_LABELS = {3: "3 месяца", 6: "6 месяцев", 12: "12 месяцев"}
+_PREMIUM_PLANS = (
+    (3, "3 месяца - 1390₽"),
+    (6, "6 месяцев - 1990₽"),
+    (12, "12 месяцев - 3190₽"),
+)
+_PREMIUM_PRICE = dict(_PREMIUM_PLANS)
 
 
 @dataclass
@@ -77,7 +81,7 @@ class ShopBot:
             self._open_stars(chat_id, user.get("username"))
             return
         if text == BUY_PREMIUM:
-            self._open_premium(chat_id, user.get("username"))
+            self._open_premium(chat_id)
             return
         if text in {BUY_GIFTS, REFERRALS, BUY_TON}:
             self.drafts.pop(chat_id, None)
@@ -85,9 +89,6 @@ class ShopBot:
             return
         if text == GIFT_STARS:
             self._ask_friend(chat_id, "stars")
-            return
-        if text == GIFT_PREMIUM:
-            self._ask_friend(chat_id, "premium")
             return
         draft = self.drafts.get(chat_id)
         if draft is not None and not command:
@@ -120,8 +121,18 @@ class ShopBot:
         if "id" not in chat:
             return
         chat_id = int(chat["id"])
+        user = query.get("from") or {}
         data = query.get("data") or ""
-        if data.startswith("q:"):
+        if data == "p:self":
+            self._premium_self(chat_id, user.get("username"))
+            return
+        if data == "p:other":
+            self._premium_other(chat_id)
+            return
+        if data == "p:back":
+            self._open_premium(chat_id)
+            return
+        if data.startswith("p:"):
             self._choose_months(chat_id, data[2:])
 
     def _show_menu(self, chat_id: int, text: str = "Выберите действие:") -> None:
@@ -130,8 +141,42 @@ class ShopBot:
     def _open_stars(self, chat_id: int, own_username: object) -> None:
         self._open_for_self(chat_id, "stars", own_username)
 
-    def _open_premium(self, chat_id: int, own_username: object) -> None:
-        self._open_for_self(chat_id, "premium", own_username)
+    def _open_premium(self, chat_id: int) -> None:
+        self.drafts[chat_id] = Draft(kind="premium", step="whom")
+        self.api.send_message(
+            chat_id,
+            "🌟 Выберите кому отправить Premium:",
+            [[("👤 На мой аккаунт", "p:self")], [("👥 На другой аккаунт", "p:other")]],
+        )
+
+    def _premium_self(self, chat_id: int, own_username: object) -> None:
+        username = own_username if isinstance(own_username, str) else ""
+        try:
+            recipient = normalize_username(username)
+        except ShopError:
+            self.drafts[chat_id] = Draft(kind="premium", step="nick")
+            self.api.send_message(
+                chat_id,
+                "У аккаунта нет username. Напишите свой ник.",
+                [[("↩️ Вернуться назад", "p:back")]],
+            )
+            return
+        self._show_premium_terms(chat_id, recipient)
+
+    def _premium_other(self, chat_id: int) -> None:
+        self.drafts[chat_id] = Draft(kind="premium", step="gift")
+        self.api.send_message(
+            chat_id,
+            "Введите @юзернейм аккаунта, на который нужно отправить Premium\n\n"
+            "Убедитесь что вводите юзернейм правильно.",
+            [[("↩️ Вернуться назад", "p:back")]],
+        )
+
+    def _show_premium_terms(self, chat_id: int, recipient: str) -> None:
+        self.drafts[chat_id] = Draft(kind="premium", step="quantity", recipient=recipient)
+        rows = [[(label, f"p:{months}")] for months, label in _PREMIUM_PLANS]
+        rows.append([("↩️ Назад", "p:back")])
+        self.api.send_message(chat_id, "🌟 Выберите срок подписки:", rows)
 
     def _open_for_self(self, chat_id: int, kind: str, own_username: object) -> None:
         username = own_username if isinstance(own_username, str) else ""
@@ -152,7 +197,14 @@ class ShopBot:
             try:
                 recipient = normalize_username(text)
             except ShopError as exc:
-                self.api.send_message(chat_id, exc.message, keyboard=_gift_keyboard(draft.kind) if draft.step == "gift" else _MENU)
+                if draft.kind == "premium":
+                    self.api.send_message(chat_id, exc.message, [[("↩️ Вернуться назад", "p:back")]])
+                else:
+                    keyboard = _gift_keyboard(draft.kind) if draft.step == "gift" else _MENU
+                    self.api.send_message(chat_id, exc.message, keyboard=keyboard)
+                return
+            if draft.kind == "premium":
+                self._show_premium_terms(chat_id, recipient)
                 return
             self._ask_amount(chat_id, draft.kind, recipient)
             return
@@ -172,11 +224,6 @@ class ShopBot:
                 placeholder="Введите количество",
             )
             return
-        self.api.send_message(
-            chat_id,
-            f"🚀 Выберите срок Premium: 3, 6 или 12 месяцев\n\n👤 Получатель: @{recipient}",
-            keyboard=[list(_MONTH_LABELS.values()), [GIFT_PREMIUM]],
-        )
 
     def _finish_stars(self, chat_id: int, draft: Draft, text: str) -> None:
         try:
@@ -212,17 +259,14 @@ class ShopBot:
 
     def _finish_premium(self, chat_id: int, draft: Draft, text: str) -> None:
         months = _months(text)
-        if months not in _PREMIUM_MONTHS:
-            self.api.send_message(
-                chat_id,
-                f"🚀 Выберите срок Premium: 3, 6 или 12 месяцев\n\n👤 Получатель: @{draft.recipient}",
-                keyboard=[list(_MONTH_LABELS.values()), [GIFT_PREMIUM]],
-            )
+        label = _PREMIUM_PRICE.get(months)
+        if label is None:
+            self._show_premium_terms(chat_id, draft.recipient or "")
             return
         self.drafts.pop(chat_id, None)
         self.api.send_message(
             chat_id,
-            f"☆ Срок: {months} мес.\n👤 Получатель: @{draft.recipient}",
+            f"{label}\n👤 Получатель: @{draft.recipient}",
             keyboard=_MENU,
         )
 
@@ -290,8 +334,6 @@ def main() -> None:
 
 
 def _gift_keyboard(kind: str) -> list[list[str]]:
-    if kind == "premium":
-        return [[GIFT_PREMIUM]]
     return [[GIFT_STARS]]
 
 
