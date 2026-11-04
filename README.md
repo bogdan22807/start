@@ -21,9 +21,44 @@ Fragment API уже включает свою комиссию 10% в сумму
 
 Получатель — username. Числовой `user_id` Fragment не принимает.
 
-## Запуск
+## Бот в Telegram
+
+Покупатель открывает бота в Telegram, выбирает товар и username. Бот называет сумму. Fragment вызывается только после команды администратора `/paid`.
+
+Токен бота берётся у [@BotFather](https://t.me/BotFather): команда `/newbot`, затем скопируйте выданный токен в `BOT_TOKEN`. Это не `API_TOKEN` и не `SHOP_ADMIN_TOKEN`.
+
+```bash
+SHOP_MODE=dry-run \
+BOT_TOKEN='токен из BotFather' \
+SHOP_MARKUP_PERCENT=20 \
+SHOP_STAR_UNIT_COST=0.015 \
+SHOP_PREMIUM_COST_3M=12 \
+SHOP_PREMIUM_COST_6M=22 \
+SHOP_PREMIUM_COST_12M=40 \
+python3 -m shop.bot
+```
+
+В Telegram откройте своего бота и отправьте `/start`. В ответе будет ваш числовой id. Остановите бота и запустите снова, подставив этот id. Пока режим `dry-run`, `/paid` ничего не покупает на Fragment и только проверяет диалог.
+
+```bash
+SHOP_MODE=dry-run \
+BOT_TOKEN='токен из BotFather' \
+TELEGRAM_ADMIN_IDS='ваш_числовой_id' \
+SHOP_MARKUP_PERCENT=20 \
+SHOP_STAR_UNIT_COST=0.015 \
+SHOP_PREMIUM_COST_3M=12 \
+SHOP_PREMIUM_COST_6M=22 \
+SHOP_PREMIUM_COST_12M=40 \
+python3 -m shop.bot
+```
+
+Для живой выдачи замените режим на `SHOP_MODE=live` и добавьте `API_TOKEN`. Команда `/paid id_заказа` тогда покупает товар на Fragment. Сначала проверьте бота в `dry-run`.
 
 Числа ниже — пример, не прайс Fragment. Подставьте свою наценку и свою себестоимость.
+
+## HTTP-сервер
+
+Тот же магазин без окна Telegram:
 
 ```bash
 python3 -m unittest discover -s tests
