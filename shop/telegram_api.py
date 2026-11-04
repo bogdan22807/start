@@ -47,11 +47,9 @@ class TelegramApi:
             "setMyCommands",
             {
                 "commands": [
-                    {"command": "catalog", "description": "Звёзды и Premium"},
+                    {"command": "start", "description": "Купить звёзды или Premium"},
                     {"command": "cancel", "description": "Отменить выбор"},
                     {"command": "id", "description": "Показать Telegram id"},
-                    {"command": "paid", "description": "Админ: подтвердить заказ"},
-                    {"command": "claim", "description": "Стать администратором"},
                 ]
             },
         )

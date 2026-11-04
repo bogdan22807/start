@@ -1,23 +1,34 @@
-"""Telegram shop bot. Buyers pick a product; an admin confirms payment before Fragment is called."""
+"""Telegram shop bot. The start screen asks who receives Stars or Premium, then stops."""
 
 import os
 import time
+from dataclasses import dataclass
 
-from shop.catalog import get_product
 from shop.config import load_shop
 from shop.errors import ShopError
 from shop.orders import OrderStore
 from shop.service import Shop
 from shop.telegram_api import TelegramApi
+from shop.username import normalize_username
+
+_STAR_MIN = 50
+_STAR_MAX = 1_000_000
+_PREMIUM_MONTHS = (3, 6, 12)
+
+
+@dataclass
+class Draft:
+    kind: str
+    step: str
+    recipient: str | None = None
 
 
 class ShopBot:
-    def __init__(self, shop: Shop, api, admin_ids: set[int], claim_code: str = ""):
+    def __init__(self, shop: Shop, api, admin_ids: set[int]):
         self.shop = shop
         self.api = api
         self.admin_ids = admin_ids
-        self.claim_code = claim_code.strip()
-        self.pending: dict[int, str] = {}
+        self.drafts: dict[int, Draft] = {}
 
     def handle(self, update: dict) -> None:
         if "callback_query" in update:
@@ -33,26 +44,24 @@ class ShopBot:
         user_id = int(user["id"]) if "id" in user else chat_id
         command, rest = _command(text)
         if command in {"/start", "/catalog"}:
-            self.pending.pop(chat_id, None)
-            self._show_catalog(chat_id, user_id)
+            self.drafts.pop(chat_id, None)
+            self._show_start(chat_id)
             return
         if command == "/id":
             self.api.send_message(chat_id, f"Ваш Telegram id: {user_id}")
             return
         if command == "/cancel":
-            self.pending.pop(chat_id, None)
-            self.api.send_message(chat_id, "Выбор отменён. Нажмите /catalog, чтобы открыть товары.")
+            self.drafts.pop(chat_id, None)
+            self.api.send_message(chat_id, "Выбор отменён. Нажмите /start, чтобы открыть меню.")
             return
         if command == "/paid":
             self._confirm(chat_id, user_id, rest)
             return
-        if command == "/claim":
-            self._claim(chat_id, user_id, rest)
+        draft = self.drafts.get(chat_id)
+        if draft is not None and not command:
+            self._on_text(chat_id, draft, text)
             return
-        if chat_id in self.pending and not command:
-            self._create_for_username(chat_id, self.pending[chat_id], text)
-            return
-        self._show_catalog(chat_id, user_id)
+        self._show_start(chat_id)
 
     def run(self) -> None:
         offset = None
@@ -81,77 +90,109 @@ class ShopBot:
         chat_id = int(chat["id"])
         user = query.get("from") or {}
         data = query.get("data") or ""
-        if data.startswith("b:"):
-            self._ask_recipient(chat_id, data[2:], user.get("username"))
+        if data == "k:stars":
+            self._ask_who(chat_id, "stars")
             return
-        if data.startswith("m:"):
-            username = user.get("username")
-            if not isinstance(username, str) or not username:
-                self.pending[chat_id] = data[2:]
-                self.api.send_message(chat_id, "У этого аккаунта нет username. Напишите username получателя.")
-                return
-            self._create_for_username(chat_id, data[2:], username)
-
-    def _show_catalog(self, chat_id: int, user_id: int) -> None:
-        catalog = self.shop.catalog()
-        buttons = []
-        for item in catalog["products"]:
-            if not item["priced"]:
-                continue
-            label = f"{item['title']} — {item['customer_price']} {item['currency']}"
-            buttons.append([(label, f"b:{item['id']}")])
-        lines = [
-            "Магазин звёзд и Premium.",
-            "Выберите товар и username получателя. Бот напишет сумму.",
-            "Выдача начинается после команды администратора /paid.",
-            f"Ваш Telegram id: {user_id}",
-        ]
-        if self.shop.mode == "dry-run":
-            lines.append("Сейчас проверка: Fragment не вызывается, звёзды и Premium не отправляются.")
-        if not self.admin_ids and self.claim_code:
-            lines.append("Чтобы подтверждать заказы, отправьте /claim и код администратора.")
-        if not buttons:
-            lines.append("Цены ещё не заданы. Нужны SHOP_STAR_UNIT_COST и цены Premium.")
-        self.api.send_message(chat_id, "\n".join(lines), buttons or None)
-
-    def _ask_recipient(self, chat_id: int, product_id: str, own_username: object) -> None:
-        product = get_product(product_id)
-        if product is None:
-            self.api.send_message(chat_id, "Такого товара нет. Откройте /catalog.")
+        if data == "k:premium":
+            self._ask_who(chat_id, "premium")
             return
-        self.pending[chat_id] = product_id
-        buttons = None
-        if isinstance(own_username, str) and own_username:
-            buttons = [[(f"Себе (@{own_username})", f"m:{product_id}")]]
+        if data.startswith("w:"):
+            _prefix, who, kind = data.split(":", 2)
+            self._choose_who(chat_id, kind, who, user.get("username"))
+            return
+        if data.startswith("q:"):
+            self._choose_months(chat_id, data[2:])
+
+    def _show_start(self, chat_id: int) -> None:
         self.api.send_message(
             chat_id,
-            f"Кому отправить «{product.title}»?\nНапишите username получателя или нажмите кнопку ниже.",
-            buttons,
+            "Выберите, что купить.",
+            [[("Купить звезды", "k:stars")], [("Телеграм премиум", "k:premium")]],
         )
 
-    def _create_for_username(self, chat_id: int, product_id: str, username: str) -> None:
-        try:
-            order = self.shop.create_order(product_id, username, buyer_chat_id=chat_id)
-        except ShopError as exc:
-            self.api.send_message(chat_id, exc.message)
-            return
-        self.pending.pop(chat_id, None)
-        product = get_product(order.product_id)
-        title = product.title if product else order.product_id
-        text = (
-            f"Заказ {order.id}\n"
-            f"{title} для @{order.recipient_username}\n"
-            f"К оплате {order.customer_amount} {order.currency}.\n"
-            "После оплаты администратор подтвердит выдачу."
+    def _ask_who(self, chat_id: int, kind: str) -> None:
+        self.drafts[chat_id] = Draft(kind=kind, step="who")
+        if kind == "stars":
+            text = "Минимальный заказ от 50 звёзд."
+        else:
+            text = "Telegram Premium на 3, 6 или 12 месяцев."
+        self.api.send_message(
+            chat_id,
+            text,
+            [[("Себе", f"w:self:{kind}"), ("Другу", f"w:friend:{kind}")]],
         )
-        if chat_id in self.admin_ids:
-            text += f"\nПодтвердить: /paid {order.id}"
-        self.api.send_message(chat_id, text)
-        notice = f"Новый заказ {order.id}\n{title} для @{order.recipient_username}\n{order.customer_amount} {order.currency}\n/paid {order.id}"
-        for admin_id in sorted(self.admin_ids):
-            if admin_id == chat_id:
-                continue
-            self.api.send_message(admin_id, notice)
+
+    def _choose_who(self, chat_id: int, kind: str, who: str, own_username: object) -> None:
+        if kind not in {"stars", "premium"} or who not in {"self", "friend"}:
+            self._show_start(chat_id)
+            return
+        if who == "friend":
+            self.drafts[chat_id] = Draft(kind=kind, step="nick")
+            self.api.send_message(chat_id, "Напишите ник друга.")
+            return
+        username = own_username if isinstance(own_username, str) else ""
+        try:
+            recipient = normalize_username(username)
+        except ShopError:
+            self.drafts[chat_id] = Draft(kind=kind, step="nick")
+            self.api.send_message(chat_id, "У аккаунта нет username. Напишите свой ник.")
+            return
+        self._ask_amount(chat_id, kind, recipient)
+
+    def _on_text(self, chat_id: int, draft: Draft, text: str) -> None:
+        if draft.step == "nick":
+            try:
+                recipient = normalize_username(text)
+            except ShopError as exc:
+                self.api.send_message(chat_id, exc.message)
+                return
+            self._ask_amount(chat_id, draft.kind, recipient)
+            return
+        if draft.step == "quantity" and draft.kind == "stars":
+            self._finish_stars(chat_id, draft, text)
+            return
+        if draft.step == "quantity" and draft.kind == "premium":
+            self._finish_premium(chat_id, draft, text)
+
+    def _ask_amount(self, chat_id: int, kind: str, recipient: str) -> None:
+        self.drafts[chat_id] = Draft(kind=kind, step="quantity", recipient=recipient)
+        if kind == "stars":
+            self.api.send_message(chat_id, f"Сколько звёзд отправить @{recipient}? Минимум 50.")
+            return
+        self.api.send_message(
+            chat_id,
+            f"Выберите срок Premium для @{recipient}.",
+            [[("3 месяца", "q:3"), ("6 месяцев", "q:6"), ("12 месяцев", "q:12")]],
+        )
+
+    def _finish_stars(self, chat_id: int, draft: Draft, text: str) -> None:
+        try:
+            amount = int(text.strip())
+        except ValueError:
+            amount = 0
+        if amount < _STAR_MIN or amount > _STAR_MAX:
+            self.api.send_message(chat_id, "Минимальный заказ от 50 звёзд. Напишите число.")
+            return
+        self.drafts.pop(chat_id, None)
+        self.api.send_message(chat_id, f"Выбрано: {amount} звёзд для @{draft.recipient}.")
+
+    def _choose_months(self, chat_id: int, raw: str) -> None:
+        draft = self.drafts.get(chat_id)
+        if draft is None or draft.step != "quantity" or draft.kind != "premium":
+            self._show_start(chat_id)
+            return
+        self._finish_premium(chat_id, draft, raw)
+
+    def _finish_premium(self, chat_id: int, draft: Draft, text: str) -> None:
+        try:
+            months = int(text.strip())
+        except ValueError:
+            months = 0
+        if months not in _PREMIUM_MONTHS:
+            self.api.send_message(chat_id, "Для Premium доступны 3, 6 или 12 месяцев.")
+            return
+        self.drafts.pop(chat_id, None)
+        self.api.send_message(chat_id, f"Выбрано: Premium на {months} мес. для @{draft.recipient}.")
 
     def _confirm(self, chat_id: int, user_id: int, rest: str) -> None:
         if user_id not in self.admin_ids:
@@ -175,32 +216,12 @@ class ShopBot:
             self.api.send_message(chat_id, exc.message)
             return
         if order.status == "fulfilled":
-            if self.shop.mode == "dry-run":
-                result = (
-                    f"Заказ {order.id} записан как выдан @{order.recipient_username}. "
-                    "Проверка: Fragment не вызывался, звёзды и Premium не отправлены."
-                )
-            else:
-                result = f"Заказ {order.id} выдан @{order.recipient_username}."
+            result = f"Заказ {order.id} выдан @{order.recipient_username}."
         else:
             result = f"Заказ {order.id} принят Fragment, статус {order.status}. Повторите /paid {order.id}"
         self.api.send_message(chat_id, result)
         if order.buyer_chat_id and order.buyer_chat_id != chat_id:
             self.api.send_message(order.buyer_chat_id, result)
-
-    def _claim(self, chat_id: int, user_id: int, rest: str) -> None:
-        if user_id in self.admin_ids:
-            self.api.send_message(chat_id, "Вы уже администратор. Подтверждение заказа: /paid id_заказа")
-            return
-        code = rest.strip()
-        if not self.claim_code or code != self.claim_code:
-            self.api.send_message(chat_id, "Код администратора не подошёл. Формат: /claim код")
-            return
-        self.admin_ids.add(user_id)
-        self.api.send_message(
-            chat_id,
-            f"Вы администратор. Ваш Telegram id: {user_id}.\nПосле оплаты покупателя отправьте /paid id_заказа.",
-        )
 
 
 def main() -> None:
@@ -216,11 +237,8 @@ def main() -> None:
             admin_ids.add(int(part))
         except ValueError as exc:
             raise SystemExit("TELEGRAM_ADMIN_IDS должен быть списком числовых id через запятую.") from exc
-    claim_code = os.environ.get("TELEGRAM_ADMIN_CLAIM", "").strip()
-    if not admin_ids and not claim_code:
+    if not admin_ids:
         print("TELEGRAM_ADMIN_IDS пуст. Напишите боту /id и подставьте этот номер, иначе оплату некому подтвердить.")
-    elif not admin_ids:
-        print("Администраторов нет. /claim с кодом TELEGRAM_ADMIN_CLAIM назначает администратора.")
     shop = load_shop(OrderStore(os.environ.get("SHOP_DB", "data/orders.db")))
     api = TelegramApi(token)
     try:
@@ -228,7 +246,7 @@ def main() -> None:
         api.set_commands()
     except ShopError as exc:
         print(f"telegram setup: {exc.message}")
-    bot = ShopBot(shop, api, admin_ids, claim_code=claim_code)
+    bot = ShopBot(shop, api, admin_ids)
     print("telegram bot polling")
     try:
         bot.run()
