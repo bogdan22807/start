@@ -371,34 +371,65 @@ def stat_response(body: dict) -> tuple[int, dict]:
         snapshot = unpack_snapshot(packed, token)
         if snapshot is None:
             raise ShopError("bad_snapshot", "Снимок статистики не сходится.", 400)
+    from shop.stats import remember_user
+
+    remember_user(profile["id"], profile.get("username") or "")
     users, orders = load_state()
     crypto: list[dict] = []
+    official: dict = {}
     crypto_token = os.environ.get("CRYPTO_PAY_TOKEN", "").strip()
     if crypto_token:
+        client = CryptoPay(crypto_token, base_url=_crypto_base())
         try:
-            crypto = _crypto_history(CryptoPay(crypto_token, base_url=_crypto_base()))
+            crypto = _crypto_history(client)
         except ShopError:
             crypto = []
-    return 200, build_report(users, orders, crypto=crypto, snapshot=snapshot)
+        official = _official_stats(client)
+    return 200, build_report(users, orders, crypto=crypto, snapshot=snapshot, official=official)
 
 
 def _crypto_history(client: CryptoPay) -> list[dict]:
     found: list[dict] = []
     seen: set[str] = set()
-    offset = 0
-    while len(found) < 2000:
-        page = client.list_invoices(count=100, offset=offset)
-        if not page:
-            break
-        marker = str(page[0].get("invoice_id"))
-        if marker in seen:
-            break
-        seen.add(marker)
-        found.extend(page)
-        if len(page) < 100:
-            break
-        offset += len(page)
+    for status in (None, "paid"):
+        offset = 0
+        while len(found) < 2000:
+            page = client.list_invoices(status=status, count=100, offset=offset)
+            if not page:
+                break
+            fresh = []
+            for item in page:
+                marker = str(item.get("invoice_id"))
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                fresh.append(item)
+            if not fresh:
+                break
+            found.extend(fresh)
+            if len(page) < 100:
+                break
+            offset += len(page)
     return found[:2000]
+
+
+def _official_stats(client: CryptoPay) -> dict:
+    from datetime import datetime, timezone
+
+    from shop.stats import period_start
+
+    now = datetime.now(timezone.utc)
+    official: dict = {}
+    for name in ("1", "3", "7", "30", "all"):
+        start = period_start(name, now)
+        try:
+            stamp = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if start else None
+            payload = client.get_stats(start_at=stamp)
+        except ShopError:
+            continue
+        if isinstance(payload, dict):
+            official[name] = payload
+    return official
 
 
 def _created(invoice_id: object, pay_url: str, status: str, order: dict, description: str) -> dict:

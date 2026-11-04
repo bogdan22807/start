@@ -5,12 +5,12 @@ import re
 import time
 
 from shop.errors import ShopError
-from shop.stats import is_admin, load_state, pack_snapshot, remember_user
+from shop.stats import build_report, is_admin, load_state, pack_snapshot, remember_user
 from shop.telegram_api import TelegramApi
 from shop.tokens import telegram_bot_token
 
 BUY_STARS = "Купить звезды"
-STAT_BUTTON = "Статистика"
+STAT_BUTTON = "📊 Статистика"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
 _ADMIN_COMMANDS: set[int] = set()
 
@@ -53,7 +53,7 @@ class ShopBot:
                 return
             self.api.send_message(
                 chat_id,
-                "Статистика\n\nПользователи, заказы и сумма за 1, 3, 7, 30 дней и за всё время.",
+                stat_text(),
                 open_button=(STAT_BUTTON, admin_url(self.app_url)),
             )
             return
@@ -123,7 +123,22 @@ def admin_url(app_url: str) -> str:
         return base
     if not packed:
         return base
-    return base + "?s=" + packed
+    return base + "?s=" + packed + "#" + packed
+
+
+def stat_text() -> str:
+    try:
+        report = build_report(*load_state())
+        entire = report["periods"]["all"]
+    except Exception:
+        entire = {"users": 0, "orders": 0, "sum": "0.00"}
+    return (
+        "📊 Статистика\n\n"
+        f"👤 Пользователи: {entire['users']}\n"
+        f"⭐ Заказы: {entire['orders']}\n"
+        f"💰 Сумма: {entire['sum']} USDT\n\n"
+        "Графики за 1, 3, 7, 30 дней и всё время — на кнопке."
+    )
 
 
 def _remember(user: dict) -> None:

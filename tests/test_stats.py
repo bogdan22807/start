@@ -17,6 +17,7 @@ from shop.stats import (
     is_admin,
     load_state,
     pack_snapshot,
+    parse_app_stats,
     remember_invoice,
     remember_user,
     unpack_snapshot,
@@ -116,6 +117,28 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(entire["orders"], 3)
         self.assertEqual(entire["sum"], "1 268.24")
         self.assertEqual(sum(point["orders"] for point in three["points"]), three["orders"])
+
+    def test_crypto_pay_totals_fill_an_empty_ledger(self):
+        official = {
+            "all": {"unique_users_count": 4, "paid_invoice_count": 2, "volume": "18.75"},
+            "1": {"unique_users_count": 1, "paid_invoice_count": 1, "volume": 9},
+        }
+        self.assertEqual(parse_app_stats(official["all"])["orders"], 2)
+        report = build_report([], [], official=official, now=NOW)
+        self.assertEqual(report["periods"]["all"]["users"], 4)
+        self.assertEqual(report["periods"]["all"]["orders"], 2)
+        self.assertEqual(report["periods"]["all"]["sum"], "18.75")
+        self.assertEqual(report["periods"]["all"]["points"][-1]["orders"], 2)
+        self.assertEqual(report["periods"]["1"]["orders"], 1)
+        self.assertEqual(report["periods"]["1"]["points"][19]["orders"], 1)
+        richer = build_report(
+            [{"id": 1, "first_seen": "2026-11-04T10:00:00+00:00"}],
+            [{"id": "today", "status": "paid", "paid_at": "2026-11-04T10:00:00+00:00", "amount": "40.00", "user_id": 1}],
+            official={"all": {"unique_users_count": 1, "paid_invoice_count": 1, "volume": "1.00"}},
+            now=NOW,
+        )
+        self.assertEqual(richer["periods"]["all"]["sum"], "40.00")
+        self.assertEqual(richer["periods"]["all"]["orders"], 1)
 
     def test_crypto_invoices_fill_gaps_without_double_counting(self):
         invoices = [

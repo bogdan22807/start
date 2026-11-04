@@ -197,12 +197,28 @@ def unpack_snapshot(packed: str, token: str) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def parse_app_stats(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"users": 0, "orders": 0, "sum": "0.00"}
+    return {
+        "users": _count(payload.get("unique_users_count")),
+        "orders": _count(payload.get("paid_invoice_count")),
+        "sum": _money_value(payload.get("volume")) or "0.00",
+    }
+
+
+def period_start(name: str, now: datetime) -> datetime | None:
+    local = now.astimezone(timezone.utc).astimezone(ZONE)
+    return _window_start(name, local)
+
+
 def build_report(
     users: list[dict],
     orders: list[dict],
     *,
     crypto: list[dict] | None = None,
     snapshot: dict | None = None,
+    official: dict | None = None,
     now: datetime | None = None,
 ) -> dict:
     moment = now or datetime.now(timezone.utc)
@@ -222,9 +238,42 @@ def build_report(
     _add_crypto(known, paid, crypto or [], include_users=extra == 0)
     local_now = moment.astimezone(ZONE)
     periods = {}
+    supplied = official if isinstance(official, dict) else {}
     for name in PERIODS:
-        periods[name] = _period(name, known, paid, extra, local_now)
+        periods[name] = _apply_official(
+            _period(name, known, paid, extra, local_now),
+            supplied.get(name) if isinstance(supplied.get(name), dict) else None,
+            local_now,
+        )
     return {"currency": "USDT", "periods": periods}
+
+
+def _apply_official(period: dict, official: dict | None, local_now: datetime) -> dict:
+    if not official:
+        return period
+    parsed = parse_app_stats(official) if "volume" in official or "paid_invoice_count" in official else official
+    users = max(_count(period.get("users")), _count(parsed.get("users")))
+    orders = max(_count(period.get("orders")), _count(parsed.get("orders")))
+    current = _decimal_money(period.get("sum"))
+    announced = _decimal_money(parsed.get("sum"))
+    total = announced if announced > current else current
+    period["users"] = users
+    period["orders"] = orders
+    period["sum"] = _money(total)
+    points = period.get("points") if isinstance(period.get("points"), list) else []
+    if not points:
+        return period
+    index = local_now.hour if len(points) == 24 else len(points) - 1
+    shown_orders = sum(_count(point.get("orders")) for point in points)
+    shown_users = sum(_count(point.get("users")) for point in points)
+    shown_sum = sum((_decimal_money(point.get("sum")) for point in points), Decimal("0.00"))
+    if orders > shown_orders:
+        points[index]["orders"] = _count(points[index].get("orders")) + orders - shown_orders
+    if users > shown_users:
+        points[index]["users"] = _count(points[index].get("users")) + users - shown_users
+    if total > shown_sum:
+        points[index]["sum"] = _money(_decimal_money(points[index].get("sum")) + total - shown_sum)
+    return period
 
 
 def _add_ledger_users(known: dict[int, datetime], users: list[dict]) -> None:
@@ -270,7 +319,8 @@ def _add_crypto(known: dict[int, datetime], paid: dict[str, dict], invoices: lis
     for item in invoices:
         if not isinstance(item, dict):
             continue
-        if str(item.get("asset") or "USDT").upper() != "USDT":
+        asset = str(item.get("asset") or "").upper()
+        if asset and asset != "USDT":
             continue
         created = _parse_time(item.get("created_at"))
         buyer = _payload_buyer(item.get("payload"))
@@ -482,6 +532,39 @@ def _amount(value: object) -> str | None:
     if amount <= 0 or amount > Decimal("1000000"):
         return None
     return f"{amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):.2f}"
+
+
+def _count(value: object) -> int:
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, int):
+        return value if value > 0 else 0
+    if isinstance(value, float) and value > 0:
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            return int(text)
+    return 0
+
+
+def _money_value(value: object) -> str | None:
+    if isinstance(value, bool) or value is None or value == "":
+        return None
+    try:
+        amount = Decimal(str(value).strip())
+    except Exception:
+        return None
+    if amount < 0 or amount > Decimal("100000000"):
+        return None
+    return _money(amount)
+
+
+def _decimal_money(value: object) -> Decimal:
+    text = _money_value(value)
+    if text is None:
+        return Decimal("0.00")
+    return Decimal(text.replace(" ", ""))
 
 
 def _money(amount: Decimal) -> str:

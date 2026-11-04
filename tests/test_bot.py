@@ -114,8 +114,10 @@ class BotTests(unittest.TestCase):
     def test_stat_opens_the_admin_panel_for_bogdan(self):
         self.bot.handle(_message(10, "/stat", username="Bogdan22807", first_name="Богдан"))
         sent = self.api.sent[-1]
-        self.assertIn("1, 3, 7, 30 дней", sent["text"])
-        self.assertEqual(sent["open_button"][0], "Статистика")
+        self.assertIn("👤 Пользователи: 1", sent["text"])
+        self.assertIn("⭐ Заказы", sent["text"])
+        self.assertIn("💰 Сумма", sent["text"])
+        self.assertEqual(sent["open_button"][0], "📊 Статистика")
         self.assertTrue(sent["open_button"][1].startswith("https://shop.example/admin.html"))
         self.assertEqual(self.api.admin_commands, [10])
         self.bot.handle(_message(10, "/start", username="@Bogdan22807", first_name="Богдан"))
@@ -195,6 +197,9 @@ class BotTests(unittest.TestCase):
         self.assertIn("#1b86ee", folded_admin)
         self.assertIn("#face13", folded_admin)
         self.assertIn("#000000", folded_admin)
+        self.assertIn('id="star"', admin)
+        self.assertIn('id="gem"', admin)
+        self.assertIn('id="user"', admin)
         self.assertIn("<svg", folded_admin)
 
 
