@@ -50,9 +50,13 @@
     .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .app {
       width: min(100%, 440px);
-      min-height: 100dvh;
+      height: 100dvh;
+      max-height: 100dvh;
       margin: 0 auto;
-      padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 10px 16px 0;
       background:
         radial-gradient(140px 90px at 16% 78px, rgba(250, 206, 19, 0.22), transparent 72%),
         var(--bg);
@@ -244,12 +248,20 @@
     .plan .sum { margin-left: auto; font-weight: 760; letter-spacing: -0.03em; }
     .custom { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
     [hidden] { display: none !important; }
+    .sheet {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding-bottom: 8px;
+    }
+    #paywall { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     .checkout {
-      position: sticky;
-      bottom: 0;
-      margin: 4px -16px 0;
-      padding: 4px 16px 2px;
-      background: linear-gradient(to top, var(--bg) 78%, var(--fade));
+      position: relative;
+      flex: none;
+      margin: 0 -16px 0;
+      padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
+      background: var(--bg);
     }
     .due {
       display: flex;
@@ -388,6 +400,7 @@
     </symbol>
   </svg>
   <main class="app" id="app">
+    <div class="sheet" id="sheet">
     <div class="top">
       <div class="switch" id="product">
         <span class="pill"></span>
@@ -428,7 +441,7 @@
       <button type="button" class="back" id="back">← Назад</button>
       <p class="summary" id="summary"></p>
       <p class="label">Банковская карта</p>
-      <button type="button" class="method" data-pay="visa">
+      <button type="button" class="method" data-pay="card">
         <svg class="ico card" viewBox="0 0 72 46" aria-hidden="true">
           <defs>
             <linearGradient id="cardSheen" x1="0" y1="0" x2="1" y2="1">
@@ -443,16 +456,7 @@
           <circle cx="57.5" cy="30" r="6.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
           <circle cx="50.4" cy="30" r="6.4" fill="none" stroke="#bdbdc2" stroke-width="1.5"/>
         </svg>
-        <span><span class="name">Visa</span></span>
-      </button>
-      <button type="button" class="method" data-pay="mastercard">
-        <svg class="ico card" viewBox="0 0 72 46" aria-hidden="true">
-          <rect x="1.2" y="1.2" width="69.6" height="43.6" rx="7" fill="#101012" stroke="#e6e6ea" stroke-width="1.6"/>
-          <circle cx="32" cy="23" r="9" fill="#EB001B"/>
-          <circle cx="42" cy="23" r="9" fill="#F79E1B"/>
-          <path d="M37 15.7a9 9 0 0 1 0 14.6 9 9 0 0 1 0-14.6z" fill="#FF5F00"/>
-        </svg>
-        <span><span class="name">Mastercard</span></span>
+        <span><span class="name">Банковская карта</span><span class="sub">Visa и Mastercard</span></span>
       </button>
       <p class="label">Криптой</p>
       <button type="button" class="method" data-pay="cryptobot">
@@ -467,6 +471,7 @@
       </button>
       <p class="note" id="paynote"></p>
     </section>
+    </div>
     <div class="checkout">
       <div class="due"><span>К оплате</span><strong id="due">18.75 USDT</strong></div>
       <div class="burst" id="burst"></div>
@@ -496,7 +501,7 @@
     const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
 
     const THEME_KEY = "shop-bg";
-    const PAY_NAMES = { visa: "Visa", mastercard: "Mastercard", cryptobot: "Crypto Bot", heleket: "Heleket" };
+    const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
 
     function paintChrome(color) {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -732,6 +737,7 @@
             note.classList.remove("show");
             paintSelection();
             updatePay();
+            keepVisible(button);
           });
           choices.appendChild(button);
         });
@@ -758,10 +764,19 @@
           note.classList.remove("show");
           paintSelection();
           updatePay();
+          keepVisible(button);
         });
         choices.appendChild(button);
       });
       paintSelection();
+    }
+
+    function keepVisible(node) {
+      const sheet = document.getElementById("sheet");
+      const box = node.getBoundingClientRect();
+      const frame = sheet.getBoundingClientRect();
+      if (box.bottom > frame.bottom - 6) sheet.scrollTop += box.bottom - frame.bottom + 12;
+      else if (box.top < frame.top + 6) sheet.scrollTop -= frame.top - box.top + 8;
     }
 
     function paintSelection() {
@@ -807,6 +822,7 @@
       note.classList.remove("show");
       render();
     });
+    custom.addEventListener("focus", () => keepVisible(customLabel));
     custom.addEventListener("input", () => {
       state.custom = custom.value;
       note.textContent = "";
