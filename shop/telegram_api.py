@@ -70,7 +70,7 @@ class TelegramApi:
     def set_menu_button(self, url: str) -> None:
         self._call(
             "setChatMenuButton",
-            {"menu_button": {"type": "web_app", "text": "Магазин", "web_app": {"url": url}}},
+            {"menu_button": {"type": "web_app", "text": "Открыть магазин", "web_app": {"url": url}}},
         )
 
     def set_commands(self) -> None:
@@ -78,9 +78,7 @@ class TelegramApi:
             "setMyCommands",
             {
                 "commands": [
-                    {"command": "start", "description": "Купить звёзды или Premium"},
-                    {"command": "cancel", "description": "Отменить выбор"},
-                    {"command": "id", "description": "Показать Telegram id"},
+                    {"command": "start", "description": "Открыть магазин"},
                 ]
             },
         )
