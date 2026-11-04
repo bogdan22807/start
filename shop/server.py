@@ -25,7 +25,7 @@ class ShopHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
-        if path.rstrip("/") == "/api/invoice":
+        if path.rstrip("/") in {"/api/invoice", "/api/sync"}:
             status, body = handle_request("GET", path, parsed.query, self.headers, b"")
             self._send(status, body)
             return

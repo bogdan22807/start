@@ -143,7 +143,7 @@ class FragmentClient:
         message = message[:300]
         if status == 401:
             return ShopError("unauthorized", "API_TOKEN отклонён Fragment API.", 401)
-        if status == 402:
+        if status == 402 or (status == 400 and "insufficient" in message.lower()):
             return ShopError("insufficient_balance", message, 402)
         if status == 404:
             return ShopError("fragment_not_found", message, 404)

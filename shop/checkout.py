@@ -174,6 +174,23 @@ def settle(invoice: dict, token: str, *, fragment: FragmentClient | None = None)
     return _deliver(order, invoice_id, fragment)
 
 
+def deliver_paid_invoices(*, cryptopay: CryptoPay | None = None, fragment: FragmentClient | None = None) -> dict:
+    require_purchases()
+    token = os.environ["CRYPTO_PAY_TOKEN"].strip()
+    client = cryptopay or CryptoPay(token, base_url=_crypto_base())
+    items = []
+    for invoice in client.list_invoices(status="paid", count=100):
+        if str(invoice.get("status") or "") != "paid":
+            continue
+        try:
+            items.append(settle(invoice, token, fragment=fragment))
+        except ShopError as exc:
+            if exc.code in {"bad_invoice", "amount_mismatch"}:
+                continue
+            items.append(_progress(invoice.get("invoice_id"), exc.message, retry=exc.status >= 500))
+    return {"ok": True, "items": items}
+
+
 def verify_webhook(raw: bytes, signature: str, token: str) -> bool:
     secret = hashlib.sha256(token.encode()).digest()
     expected = hmac.new(secret, raw, hashlib.sha256).hexdigest()
@@ -189,6 +206,8 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
         if method == "GET" and path == "/api/invoice":
             invoice_id = (parse_qs(query).get("id") or [""])[0]
             return 200, invoice_status(invoice_id)
+        if method == "GET" and path == "/api/sync":
+            return 200, deliver_paid_invoices()
         if method == "POST" and path == "/api/invoice":
             body = json.loads(raw.decode() or "{}")
             return 201, create_invoice(body)
@@ -206,40 +225,49 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
 
 def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None) -> dict:
     client = fragment or FragmentClient(fragment_api_token(), _fragment_base())
-    wallet = _wallet()
-    key = f"cryptopay-{invoice_id}"
     try:
         if order["kind"] == "stars":
             recipient_hash = client.search_stars(order["recipient"], order["amount"])
-            remote = client.create_stars(
-                username=order["recipient"],
-                recipient_hash=recipient_hash,
-                quantity=order["amount"],
-                wallet_type=wallet,
-                idempotency_key=key,
-            )
         else:
             recipient_hash = client.search_premium(order["recipient"], order["months"])
-            remote = client.create_premium(
-                username=order["recipient"],
-                recipient_hash=recipient_hash,
-                months=order["months"],
-                wallet_type=wallet,
-                idempotency_key=key,
-            )
+    except ShopError as exc:
+        return _delivery_error(order, invoice_id, exc)
+    remote = None
+    for wallet in _wallet_order():
+        key = f"cryptopay-{invoice_id}" if wallet == _wallet() else f"cryptopay-{invoice_id}-{wallet}"
+        try:
+            if order["kind"] == "stars":
+                remote = client.create_stars(
+                    username=order["recipient"],
+                    recipient_hash=recipient_hash,
+                    quantity=order["amount"],
+                    wallet_type=wallet,
+                    idempotency_key=key,
+                )
+            else:
+                remote = client.create_premium(
+                    username=order["recipient"],
+                    recipient_hash=recipient_hash,
+                    months=order["months"],
+                    wallet_type=wallet,
+                    idempotency_key=key,
+                )
+            break
+        except ShopError as exc:
+            if exc.code == "insufficient_balance":
+                remote = None
+                continue
+            return _delivery_error(order, invoice_id, exc)
+    if remote is None:
+        return _progress(invoice_id, "Оплата прошла. На балансе Fragment нет средств в TON и USDT.", retry=True)
+    try:
         status = str(remote.get("status") or "")
         remote_id = remote.get("order_id")
         if remote_id and status not in {"completed", "failed"}:
             remote = client.get_order(str(remote_id))
             status = str(remote.get("status") or "")
     except ShopError as exc:
-        if exc.code == "insufficient_balance":
-            return _progress(invoice_id, f"Оплата прошла. На балансе Fragment не хватает {wallet}, покупка отправится после пополнения.", retry=True)
-        if exc.code in _RETRYABLE:
-            return _progress(invoice_id, "Оплата прошла. Покупка ещё отправляется.", retry=True)
-        if exc.code == "recipient_not_found":
-            return _progress(invoice_id, f"Оплата прошла, но получатель @{order['recipient']} не найден.", retry=False)
-        return _progress(invoice_id, "Оплата прошла. " + exc.message, retry=False)
+        return _delivery_error(order, invoice_id, exc)
     if status == "completed":
         if order["kind"] == "stars":
             message = f"Звёзды отправлены на @{order['recipient']}."
@@ -252,6 +280,22 @@ def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None) -
             detail = "Fragment не смог отправить покупку."
         return _progress(invoice_id, "Оплата прошла. " + detail[:300], retry=False)
     return _progress(invoice_id, f"Оплата прошла. Покупка ещё отправляется на @{order['recipient']}.", retry=True)
+
+
+def _delivery_error(order: dict, invoice_id: object, exc: ShopError) -> dict:
+    if exc.code == "insufficient_balance":
+        return _progress(invoice_id, f"Оплата прошла. На балансе Fragment не хватает {_wallet()}.", retry=True)
+    if exc.code in _RETRYABLE:
+        return _progress(invoice_id, "Оплата прошла. Покупка ещё отправляется.", retry=True)
+    if exc.code == "recipient_not_found":
+        return _progress(invoice_id, f"Оплата прошла, но получатель @{order['recipient']} не найден.", retry=False)
+    return _progress(invoice_id, "Оплата прошла. " + exc.message, retry=False)
+
+
+def _wallet_order() -> list[str]:
+    first = _wallet()
+    second = "TON" if first == "USDT" else "USDT"
+    return [first, second]
 
 
 def _progress(invoice_id: object, message: str, *, retry: bool, delivered: bool = False) -> dict:

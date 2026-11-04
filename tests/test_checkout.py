@@ -16,6 +16,7 @@ from decimal import Decimal
 from shop.checkout import (
     create_invoice,
     cryptobot_webhook,
+    deliver_paid_invoices,
     invoice_status,
     parse_order,
     star_price,
@@ -110,6 +111,13 @@ class RecordingPay:
         if self.invoice is None or str(invoice_id) != "77":
             raise ShopError("invoice_not_found", "Счёт Crypto Bot не найден.", 404)
         return dict(self.invoice)
+
+    def list_invoices(self, *, status=None, count=100):
+        if self.invoice is None:
+            return []
+        if status and self.invoice.get("status") != status:
+            return []
+        return [dict(self.invoice)]
 
 
 class PriceTests(unittest.TestCase):
@@ -224,6 +232,42 @@ class CheckoutTests(unittest.TestCase):
         self.assertFalse(pending["delivered"])
         self.assertTrue(pending["retry"])
         self.assertIn("USDT", pending["message"])
+
+    def test_empty_usdt_balance_uses_ton(self):
+        script = Script(
+            [
+                (200, {"success": True, "recipient": "hash-1", "name": "Alex"}),
+                (400, {"message": "Insufficient wallet balance. Required: 1 USDT, Available: 0"}),
+                (202, {"order_id": "550e8400-e29b-41d4-a716-446655440000", "status": "completed", "quantity": 50}),
+            ]
+        )
+        fragment = FragmentClient(FRAGMENT, "https://fragment.test", opener=script)
+        pay = RecordingPay()
+        with purchase_env():
+            create_invoice({"kind": "stars", "recipient": "alexdev", "amount": 50}, cryptopay=pay)
+            pay.invoice["status"] = "paid"
+            done = invoice_status(77, cryptopay=pay, fragment=fragment)
+        self.assertTrue(done["delivered"])
+        self.assertEqual(script.calls[1]["body"]["wallet_type"], "USDT")
+        self.assertEqual(script.calls[1]["headers"]["Idempotency-Key"], "cryptopay-77")
+        self.assertEqual(script.calls[2]["body"]["wallet_type"], "TON")
+        self.assertEqual(script.calls[2]["headers"]["Idempotency-Key"], "cryptopay-77-TON")
+
+    def test_sync_sends_stars_for_a_paid_invoice(self):
+        script = Script(
+            [
+                (200, {"success": True, "recipient": "hash-1", "name": "Alex"}),
+                (202, {"order_id": "550e8400-e29b-41d4-a716-446655440000", "status": "completed", "quantity": 100}),
+            ]
+        )
+        fragment = FragmentClient(FRAGMENT, "https://fragment.test", opener=script)
+        pay = RecordingPay()
+        with purchase_env():
+            create_invoice({"kind": "stars", "recipient": "alexdev", "amount": 100}, cryptopay=pay)
+            pay.invoice["status"] = "paid"
+            result = deliver_paid_invoices(cryptopay=pay, fragment=fragment)
+        self.assertEqual(result["items"][0]["message"], "Звёзды отправлены на @alexdev.")
+        self.assertEqual(script.calls[1]["body"]["quantity"], 100)
 
     def test_webhook_refetches_the_invoice(self):
         raw = json.dumps({"update_id": 1, "update_type": "invoice_paid", "payload": {"invoice_id": 77, "status": "paid"}}).encode()

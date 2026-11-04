@@ -1044,7 +1044,23 @@
       }
       startCryptoPay(picked);
     });
+    async function sendPaidOrders() {
+      try {
+        const response = await fetch("/api/sync");
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.items) return;
+        const sent = body.items.filter((item) => item.delivered);
+        const waiting = body.items.find((item) => item.paid && !item.delivered && item.message);
+        const text = sent.length ? sent.map((item) => item.message).join(" ") : (waiting && waiting.message);
+        if (!text) return;
+        note.textContent = text;
+        note.classList.add("show");
+        showStatus(text);
+      } catch (error) {}
+    }
+
     render();
+    sendPaidOrders();
     const pending = savedInvoice();
     if (pending && pending.id) {
       showPaywall({
