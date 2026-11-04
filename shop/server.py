@@ -1,12 +1,15 @@
-"""Small JSON API so the shop can be exercised without Telegram."""
+"""Small JSON API for the Fragment shop."""
 
+import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from shop.fulfillment import ShopError
+from shop.config import load_shop
+from shop.errors import ShopError
 from shop.orders import OrderStore
+from shop.pricing import format_percent
 from shop.service import Shop
 
 MAX_BODY = 8192
@@ -19,15 +22,26 @@ class ShopHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/health":
-                self._send(200, {"ok": True})
+                self._send(
+                    200,
+                    {
+                        "ok": True,
+                        "mode": self.shop.mode,
+                        "currency": self.shop.prices.currency,
+                        "markup_percent": format_percent(self.shop.prices.markup_percent),
+                    },
+                )
                 return
             if path == "/catalog":
-                self._send(200, {"products": self.shop.catalog()})
+                self._send(200, self.shop.catalog())
+                return
+            if path == "/wallet":
+                self._require_admin()
+                self._send(200, self.shop.wallet())
                 return
             order_id = _order_id(path)
             if order_id and path == f"/orders/{order_id}":
-                order = self.shop.get_order(order_id)
-                self._send(200, self.shop.public_order(order))
+                self._send(200, self.shop.public_order(self.shop.get_order(order_id)))
                 return
             self._send(404, {"error": "not_found", "message": "Неизвестный адрес."})
         except ShopError as exc:
@@ -38,23 +52,50 @@ class ShopHandler(BaseHTTPRequestHandler):
         try:
             payload = self._read_json()
             if path == "/orders":
-                order = self.shop.create_order(payload.get("product_id"), payload.get("recipient_user_id"))
+                if "recipient_username" not in payload and "recipient_user_id" in payload:
+                    raise ShopError(
+                        "bad_username",
+                        "Fragment покупает на username. Укажите recipient_username, не user id.",
+                        400,
+                    )
+                order = self.shop.create_order(payload.get("product_id"), payload.get("recipient_username"))
                 self._send(201, self.shop.public_order(order))
                 return
             order_id = _order_id(path)
             if order_id and path == f"/orders/{order_id}/pay":
+                self._require_admin()
                 order = self.shop.confirm_payment(order_id, payload.get("charge_id", ""))
                 self._send(200, self.shop.public_order(order))
                 return
             if order_id and path == f"/orders/{order_id}/fulfill":
+                self._require_admin()
                 order, delivery = self.shop.fulfill(order_id)
-                self._send(200, self.shop.public_order(order, delivery))
+                code = 200 if order.status == "fulfilled" else 202
+                self._send(code, self.shop.public_order(order, delivery))
                 return
             self._send(404, {"error": "not_found", "message": "Неизвестный адрес."})
         except ShopError as exc:
             self._send(exc.status, {"error": exc.code, "message": exc.message})
         except json.JSONDecodeError:
             self._send(400, {"error": "bad_json", "message": "Тело запроса должно быть JSON."})
+
+    def _require_admin(self) -> None:
+        if self.shop.mode == "live" and not self.shop.admin_token:
+            raise ShopError(
+                "missing_admin_token",
+                "В live задайте SHOP_ADMIN_TOKEN. Без него магазин не принимает оплату и не покупает на Fragment.",
+                503,
+            )
+        expected = self.shop.admin_token
+        if not expected:
+            return
+        provided = self.headers.get("X-Admin-Token", "")
+        if not provided:
+            auth = self.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                provided = auth[7:].strip()
+        if not hmac.compare_digest(provided.encode(), expected.encode()):
+            raise ShopError("unauthorized", "Нужен верный X-Admin-Token.", 401)
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"{self.address_string()} {fmt % args}")
@@ -95,10 +136,9 @@ def make_server(host: str, port: int, shop: Shop) -> ThreadingHTTPServer:
 def main() -> None:
     host = os.environ.get("SHOP_HOST", "0.0.0.0")
     port = int(os.environ.get("SHOP_PORT", "8000"))
-    db_path = os.environ.get("SHOP_DB", "data/orders.db")
-    shop = Shop(OrderStore(db_path))
+    shop = load_shop(OrderStore(os.environ.get("SHOP_DB", "data/orders.db")))
     server = make_server(host, port, shop)
-    print(f"shop listening on http://{host}:{port} mode={os.environ.get('SHOP_MODE', 'dry-run')}")
+    print(f"shop listening on http://{host}:{port} mode={shop.mode}")
     try:
         server.serve_forever()
     finally:

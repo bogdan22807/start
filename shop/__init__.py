@@ -1,3 +1,3 @@
-"""Local shop core for a Telegram Stars and Premium storefront."""
+"""Shop that buys Telegram Stars and Premium on Fragment and resells them with a markup."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
