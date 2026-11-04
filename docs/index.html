@@ -52,7 +52,7 @@
       width: min(100%, 440px);
       min-height: 100dvh;
       margin: 0 auto;
-      padding: 14px 16px calc(22px + env(safe-area-inset-bottom));
+      padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
       background:
         radial-gradient(140px 90px at 16% 78px, rgba(250, 206, 19, 0.22), transparent 72%),
         var(--bg);
@@ -66,18 +66,18 @@
       position: relative;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      padding: 4px;
+      padding: 3px;
       background: var(--card);
-      border-radius: 18px;
+      border-radius: 16px;
       box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
     }
     .pill {
       position: absolute;
-      top: 4px;
-      bottom: 4px;
-      left: 4px;
-      width: calc(50% - 4px);
-      border-radius: 14px;
+      top: 3px;
+      bottom: 3px;
+      left: 3px;
+      width: calc(50% - 3px);
+      border-radius: 13px;
       background: var(--blue);
       transition: transform .28s cubic-bezier(.2, .8, .2, 1);
     }
@@ -85,22 +85,22 @@
     .top { display: flex; align-items: center; gap: 10px; }
     .top .switch { flex: 1; }
     #theme {
-      width: 50px;
-      height: 50px;
+      width: 42px;
+      height: 42px;
       flex: none;
       display: grid;
       place-items: center;
       padding: 0;
       line-height: 0;
-      border-radius: 18px;
+      border-radius: 14px;
       background: var(--card);
       color: var(--text);
       box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
     }
     #theme svg {
       grid-area: 1 / 1;
-      width: 22px;
-      height: 22px;
+      width: 18px;
+      height: 18px;
       display: block;
     }
     html[data-theme="dark"] #theme .moon,
@@ -108,8 +108,9 @@
     .switch button {
       position: relative;
       z-index: 1;
-      height: 42px;
-      border-radius: 14px;
+      height: 36px;
+      border-radius: 13px;
+      font-size: 15px;
       color: var(--idle);
       font-weight: 650;
     }
@@ -117,29 +118,29 @@
     .hero {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin: 16px 0 2px;
+      gap: 10px;
+      margin: 8px 0 0;
     }
     h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: 24px;
       line-height: 1.1;
       font-weight: 760;
       letter-spacing: -0.04em;
     }
     .badge {
       position: relative;
-      width: 48px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       flex: none;
       display: grid;
       place-items: center;
-      border-radius: 15px;
+      border-radius: 13px;
       background: var(--card);
       box-shadow: 0 8px 18px rgba(196, 156, 40, 0.16), 0 0 0 1px rgba(17, 17, 17, 0.04);
     }
     body.premium .badge { box-shadow: 0 8px 18px rgba(27, 134, 238, 0.16), 0 0 0 1px rgba(17, 17, 17, 0.04); }
-    .badge-ico { width: 30px; height: 30px; animation: float 2.8s ease-in-out infinite; }
+    .badge-ico { width: 24px; height: 24px; animation: float 2.8s ease-in-out infinite; }
     .spark {
       position: absolute;
       width: 7px;
@@ -152,7 +153,7 @@
     .s1 { top: -3px; right: -3px; }
     .s2 { left: -4px; bottom: 1px; width: 5px; height: 5px; animation-delay: .7s; }
     .label {
-      margin: 18px 2px 8px;
+      margin: 8px 2px 4px;
       color: var(--label);
       font-size: 12px;
       font-weight: 650;
@@ -169,14 +170,14 @@
       display: flex;
       gap: 12px;
       align-items: center;
-      margin-top: 12px;
-      padding: 12px 14px;
-      border-radius: 18px;
+      margin-top: 6px;
+      padding: 6px 12px;
+      border-radius: 16px;
       animation: rise .4s both;
     }
     .avatar {
-      width: 44px;
-      height: 44px;
+      width: 36px;
+      height: 36px;
       flex: none;
       border-radius: 50%;
       display: grid;
@@ -192,18 +193,18 @@
     .handle, .sub { font-size: 14px; }
     .field {
       width: 100%;
-      margin-top: 12px;
-      padding: 16px 16px;
-      border-radius: 18px;
+      margin-top: 8px;
+      padding: 8px 12px;
+      border-radius: 14px;
       border: 2px solid transparent;
       box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
     }
     .field::placeholder { color: var(--placeholder); }
     .field:focus { outline: none; border-color: var(--blue); box-shadow: none; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    .plans { display: grid; gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .plans { display: grid; gap: 6px; }
     .card, .plan {
-      border-radius: 18px;
+      border-radius: 14px;
       transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
       animation: rise .42s both;
     }
@@ -212,7 +213,7 @@
     .card:nth-child(4) { animation-delay: .12s; }
     .card:nth-child(5) { animation-delay: .16s; }
     .card:nth-child(6) { animation-delay: .2s; }
-    .card { min-height: 84px; padding: 14px 6px 12px; text-align: center; }
+    .card { min-height: 56px; padding: 6px 4px; text-align: center; }
     .card:active, .plan:active, #pay:active:not(:disabled) { transform: scale(0.97); }
     .card.on, .plan.on {
       border-color: var(--blue);
@@ -223,39 +224,39 @@
       align-items: center;
       justify-content: center;
       gap: 5px;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 760;
       letter-spacing: -0.03em;
     }
     .card .ico { width: 16px; height: 16px; }
     .card.on .ico { animation: pop .4s cubic-bezier(.2, .8, .2, 1); }
-    .price { margin-top: 6px; font-size: 13px; }
+    .price { margin-top: 3px; font-size: 12px; }
     .plan {
       width: 100%;
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
+      gap: 10px;
+      padding: 7px 12px;
       text-align: left;
     }
-    .plan .ico { width: 28px; height: 28px; flex: none; }
+    .plan .ico { width: 22px; height: 22px; flex: none; }
     .plan .name { display: block; font-weight: 700; }
     .plan .sum { margin-left: auto; font-weight: 760; letter-spacing: -0.03em; }
-    .custom { display: block; margin-top: 12px; color: var(--muted); font-size: 15px; }
+    .custom { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
     [hidden] { display: none !important; }
     .checkout {
       position: sticky;
       bottom: 0;
-      margin: 8px -16px 0;
-      padding: 8px 16px 4px;
+      margin: 4px -16px 0;
+      padding: 4px 16px 2px;
       background: linear-gradient(to top, var(--bg) 78%, var(--fade));
     }
     .due {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin: 8px 2px 12px;
-      font-size: 16px;
+      margin: 2px 2px 6px;
+      font-size: 15px;
     }
     .due strong { font-weight: 760; letter-spacing: -0.03em; }
     .due strong.tick { animation: pop .35s cubic-bezier(.2, .8, .2, 1); }
@@ -263,11 +264,11 @@
       position: relative;
       overflow: hidden;
       width: 100%;
-      height: 54px;
-      border-radius: 16px;
+      height: 44px;
+      border-radius: 14px;
       background: var(--blue);
       color: #fff;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 700;
       box-shadow: 0 10px 22px rgba(27, 134, 238, 0.28);
     }
