@@ -191,12 +191,7 @@ def handle_request(method: str, path: str, query: str, headers, raw: bytes) -> t
             return 200, invoice_status(invoice_id)
         if method == "POST" and path == "/api/invoice":
             body = json.loads(raw.decode() or "{}")
-            created = create_invoice(body)
-            if hasattr(headers, "get") and headers.get("x-shop-probe") == "1":
-                token = os.environ["CRYPTO_PAY_TOKEN"].strip()
-                CryptoPay(token, base_url=_crypto_base()).delete_invoice(created["invoice_id"])
-                return 201, {"ok": True, "discarded": True}
-            return 201, created
+            return 201, create_invoice(body)
         if method == "POST" and path == "/api/cryptobot":
             signature = ""
             if hasattr(headers, "get"):

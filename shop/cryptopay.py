@@ -103,9 +103,6 @@ class CryptoPay:
             raise ShopError("cryptopay_rejected", "Crypto Bot не вернул счёт.", 502)
         return result
 
-    def delete_invoice(self, invoice_id: object) -> None:
-        self._call("deleteInvoice", {"invoice_id": int(invoice_id)})
-
     def get_invoice(self, invoice_id: str) -> dict:
         result = self._call("getInvoices", {"invoice_ids": str(invoice_id)})
         invoices = result if isinstance(result, list) else []
@@ -132,6 +129,6 @@ class CryptoPay:
         if status >= 300 or not payload.get("ok"):
             raise ShopError("cryptopay_rejected", _error_text(status, payload), 502)
         result = payload.get("result")
-        if isinstance(result, (dict, list)) or result is True:
+        if isinstance(result, (dict, list)):
             return result
         raise ShopError("cryptopay_rejected", "Crypto Bot вернул пустой ответ.", 502)
