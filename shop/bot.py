@@ -240,7 +240,13 @@ def main() -> None:
     if not admin_ids:
         print("TELEGRAM_ADMIN_IDS пуст. Напишите боту /id и подставьте этот номер, иначе оплату некому подтвердить.")
     shop = load_shop(OrderStore(os.environ.get("SHOP_DB", "data/orders.db")))
-    bot = ShopBot(shop, TelegramApi(token), admin_ids)
+    api = TelegramApi(token)
+    try:
+        api.delete_webhook()
+        api.set_commands()
+    except ShopError as exc:
+        print(f"telegram setup: {exc.message}")
+    bot = ShopBot(shop, api, admin_ids)
     print("telegram bot polling")
     try:
         bot.run()
@@ -255,3 +261,7 @@ def _command(text: str) -> tuple[str, str]:
     head, _, rest = stripped.partition(" ")
     name = head.split("@", 1)[0].lower()
     return name, rest.strip()
+
+
+if __name__ == "__main__":
+    main()
