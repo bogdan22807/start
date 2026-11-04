@@ -17,6 +17,7 @@ class Order:
     id: str
     product_id: str
     recipient_username: str
+    buyer_chat_id: int | None
     status: str
     charge_id: str | None
     currency: str
@@ -36,6 +37,7 @@ class Order:
             "id": self.id,
             "product_id": self.product_id,
             "recipient_username": self.recipient_username,
+            "buyer_chat_id": self.buyer_chat_id,
             "status": self.status,
             "charge_id": self.charge_id,
             "currency": self.currency,
@@ -56,6 +58,7 @@ _COLUMNS = (
     "id",
     "product_id",
     "recipient_username",
+    "buyer_chat_id",
     "status",
     "charge_id",
     "currency",
@@ -114,11 +117,15 @@ class OrderStore:
                 delivery_json TEXT,
                 error_code TEXT,
                 error_message TEXT,
+                buyer_chat_id INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(orders)").fetchall()}
+        if "buyer_chat_id" not in columns:
+            self._conn.execute("ALTER TABLE orders ADD COLUMN buyer_chat_id INTEGER")
         self._conn.commit()
 
     def close(self) -> None:
@@ -134,12 +141,14 @@ class OrderStore:
         markup_percent: str,
         fragment_cost: str,
         customer_amount: str,
+        buyer_chat_id: int | None = None,
     ) -> Order:
         now = utc_now()
         order = Order(
             id=str(uuid.uuid4()),
             product_id=product_id,
             recipient_username=recipient_username,
+            buyer_chat_id=buyer_chat_id,
             status="pending_payment",
             charge_id=None,
             currency=currency,
