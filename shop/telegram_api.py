@@ -75,6 +75,10 @@ class TelegramApi:
             raise ShopError("telegram_rejected", "Telegram вернул апдейты в неожиданном виде.", 502)
         return result
 
+    def get_me(self) -> dict:
+        result = self._call("getMe", {})
+        return result if isinstance(result, dict) else {}
+
     def delete_webhook(self) -> None:
         self._call("deleteWebhook", {"drop_pending_updates": False})
 

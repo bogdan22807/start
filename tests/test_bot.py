@@ -41,6 +41,9 @@ class MemoryApi:
     def answer_callback(self, callback_id):
         self.answered.append(callback_id)
 
+    def get_me(self):
+        return {"username": "TraffyStarsBot"}
+
 
 class TokenTests(unittest.TestCase):
     def test_botfather_token_in_api_token_starts_the_bot(self):
@@ -71,8 +74,8 @@ class BotTests(unittest.TestCase):
         sent = self.api.sent[-1]
         self.assertEqual(sent["text"], welcome_text("Богдан"))
         self.assertIn("кнопки ниже", sent["text"])
-        self.assertEqual(sent["open_button"], ("Купить звезды", "https://shop.example"))
-        self.assertIsNone(sent["link_button"])
+        self.assertEqual(sent["link_button"], ("Купить звезды", "https://t.me/TraffyStarsBot?startapp"))
+        self.assertIsNone(sent["open_button"])
         self.assertIsNone(sent["app_button"])
         self.assertFalse(sent["remove_keyboard"])
         self.assertNotIn("Открыть магазин", sent["text"])
@@ -84,7 +87,7 @@ class BotTests(unittest.TestCase):
     def test_start_at_mention_uses_the_same_screen(self):
         self.bot.handle(_message(10, "/start@ShopBot", first_name="Анна"))
         sent = self.api.sent[-1]
-        self.assertEqual(sent["open_button"], ("Купить звезды", "https://shop.example"))
+        self.assertEqual(sent["link_button"], ("Купить звезды", "https://t.me/TraffyStarsBot?startapp"))
         self.assertIsNone(sent["app_button"])
 
     def test_other_messages_do_nothing(self):
@@ -142,8 +145,7 @@ class BotTests(unittest.TestCase):
         self.assertIn("/api/invoice", page)
         self.assertIn("init_data", page)
         self.assertIn("openTelegramLink", page)
-        self.assertIn('id="openPay"', page)
-        self.assertIn(">Открыть</button>", page)
+        self.assertNotIn('id="openPay"', page)
         self.assertNotIn("деньги не списываются", folded)
         self.assertNotIn("украин", folded)
         self.assertNotIn("мир", folded)

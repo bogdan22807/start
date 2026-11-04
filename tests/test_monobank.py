@@ -335,9 +335,7 @@ class CardCheckoutTests(unittest.TestCase):
         sent = []
         folder = tempfile.TemporaryDirectory()
         try:
-            with purchase_env(MONOBANK_CCY="840", BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")), patch(
-                "shop.checkout.TelegramApi", _QuietTelegram
-            ):
+            with purchase_env(MONOBANK_CCY="840", BOT_TOKEN=bot, SHOP_NOTIFY_FILE=str(Path(folder.name) / "sent.txt")):
                 create_invoice(
                     {
                         "kind": "stars",

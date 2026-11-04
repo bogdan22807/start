@@ -1,6 +1,7 @@
-"""Telegram shop bot. /start greets the buyer and links the working shop."""
+"""Telegram shop bot. /start greets the buyer and opens the main menu."""
 
 import os
+import re
 import time
 
 from shop.errors import ShopError
@@ -36,10 +37,11 @@ class ShopBot:
             return
         user = message.get("from") or {}
         raw_name = user.get("first_name") if isinstance(user.get("first_name"), str) else ""
+        link = main_menu_link(self.api)
         self.api.send_message(
             int(chat["id"]),
             welcome_text(raw_name),
-            open_button=(BUY_STARS, self.app_url),
+            link_button=(BUY_STARS, link) if link else None,
         )
 
     def run(self) -> None:
@@ -76,6 +78,14 @@ def main() -> None:
         print(f"telegram setup: {exc.message}")
     print("telegram bot polling")
     ShopBot(api, app_url).run()
+
+
+def main_menu_link(api) -> str:
+    me = api.get_me() if hasattr(api, "get_me") else {}
+    username = me.get("username") if isinstance(me, dict) else ""
+    if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+        return f"https://t.me/{username}?startapp"
+    return ""
 
 
 def webapp_url() -> str:

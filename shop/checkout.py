@@ -22,7 +22,6 @@ from shop.monobank import CARD_ID
 from shop.monobank import Monobank
 from shop.monobank import card_currency, monobank_token, nbu_usd_rate, verify_sign
 from shop.receipt import send_receipt
-from shop.telegram_api import TelegramApi
 from shop.tokens import fragment_api_token, telegram_bot_token
 from shop.username import normalize_username
 from shop.webapp import webapp_user_id
@@ -131,9 +130,7 @@ def _create_crypto(body: dict, *, cryptopay: CryptoPay | None = None) -> dict:
     pay_url = invoice.get("mini_app_invoice_url") or invoice.get("bot_invoice_url") or invoice.get("web_app_invoice_url")
     if not isinstance(pay_url, str) or not pay_url.startswith("https://"):
         raise ShopError("cryptopay_rejected", "Crypto Bot не дал ссылку на оплату.", 502)
-    created = _created(invoice["invoice_id"], pay_url, invoice.get("status") or "active", order, description)
-    _send_open(order, pay_url, f"{order['total']} USDT")
-    return created
+    return _created(invoice["invoice_id"], pay_url, invoice.get("status") or "active", order, description)
 
 
 def _create_card(body: dict, *, monobank: Monobank | None = None, rate: Decimal | None = None) -> dict:
@@ -156,7 +153,6 @@ def _create_card(body: dict, *, monobank: Monobank | None = None, rate: Decimal 
     created = _created(invoice["invoiceId"], invoice["pageUrl"], "created", order, description)
     created["pay"] = "card"
     created["charge"] = charge
-    _send_open(order, invoice["pageUrl"], charge)
     return created
 
 
@@ -327,24 +323,6 @@ def _header(headers, name: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
-
-
-def _send_open(order: dict, url: str, charge: str) -> None:
-    buyer = order.get("buyer_id")
-    if isinstance(buyer, bool) or not isinstance(buyer, int) or buyer <= 0:
-        return
-    if not isinstance(url, str) or not url.startswith("https://"):
-        return
-    token = telegram_bot_token()
-    if not token:
-        return
-    text = f"{order['label']} для @{order['recipient']}"
-    if charge:
-        text += f"\n{charge}"
-    try:
-        TelegramApi(token).send_message(buyer, text, link_button=("Открыть", url))
-    except ShopError:
-        return
 
 
 def _order_with_buyer(body: dict) -> dict:
