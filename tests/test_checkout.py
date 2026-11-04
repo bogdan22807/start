@@ -277,6 +277,7 @@ class CryptoPayClientTests(unittest.TestCase):
         created = client.create_invoice("0.94", "50 звёзд", "{}", paid_btn_url="https://shop.example", hidden_message="ok")
         self.assertEqual(created["invoice_id"], 9)
         self.assertEqual(script.calls[0]["headers"]["Crypto-Pay-API-Token"], "secret-token")
+        self.assertEqual(script.calls[0]["headers"]["User-Agent"], "TelegramShop/1.0")
         self.assertEqual(script.calls[0]["body"]["asset"], "USDT")
         found = client.get_invoice(9)
         self.assertEqual(found["amount"], "0.94")

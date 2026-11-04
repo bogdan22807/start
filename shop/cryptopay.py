@@ -41,6 +41,20 @@ def _default_opener(method: str, url: str, headers: dict, body: dict | None) -> 
             raise ShopError("cryptopay_unavailable", f"Crypto Bot не ответил: {retry_exc.reason}", 502) from retry_exc
 
 
+def _error_text(status: int, payload: dict) -> str:
+    error = payload.get("error")
+    if isinstance(error, dict):
+        text = error.get("name") or error.get("code")
+        if text:
+            return f"Crypto Bot отклонил счёт: {text}"[:300]
+    elif error:
+        return f"Crypto Bot отклонил счёт: {error}"[:300]
+    for key in ("detail", "title", "message"):
+        if payload.get(key):
+            return f"Crypto Bot отклонил счёт: {payload[key]}"[:300]
+    return f"Crypto Bot отклонил счёт: HTTP {status}"
+
+
 def _decode(raw: bytes) -> dict:
     if not raw:
         return {}
@@ -89,6 +103,9 @@ class CryptoPay:
             raise ShopError("cryptopay_rejected", "Crypto Bot не вернул счёт.", 502)
         return result
 
+    def delete_invoice(self, invoice_id: object) -> None:
+        self._call("deleteInvoice", {"invoice_id": int(invoice_id)})
+
     def get_invoice(self, invoice_id: str) -> dict:
         result = self._call("getInvoices", {"invoice_ids": str(invoice_id)})
         invoices = result if isinstance(result, list) else []
@@ -107,18 +124,14 @@ class CryptoPay:
             "Crypto-Pay-API-Token": self.token,
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": "TelegramShop/1.0",
         }
         status, payload = self._opener("POST", f"{self.base_url}/{method_name}", headers, body)
         if not isinstance(payload, dict):
             payload = {}
         if status >= 300 or not payload.get("ok"):
-            error = payload.get("error")
-            if isinstance(error, dict):
-                text = str(error.get("name") or "Crypto Bot отклонил счёт.")
-            else:
-                text = str(error or "Crypto Bot отклонил счёт.")
-            raise ShopError("cryptopay_rejected", text[:300], 502)
+            raise ShopError("cryptopay_rejected", _error_text(status, payload), 502)
         result = payload.get("result")
-        if isinstance(result, (dict, list)):
+        if isinstance(result, (dict, list)) or result is True:
             return result
         raise ShopError("cryptopay_rejected", "Crypto Bot вернул пустой ответ.", 502)
