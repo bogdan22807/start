@@ -1,4 +1,4 @@
-"""Order records. Payment confirmation is explicit and separate from delivery."""
+"""Local orders. Customer payment is recorded separately from the Fragment purchase."""
 
 import sqlite3
 import threading
@@ -16,11 +16,18 @@ def utc_now() -> str:
 class Order:
     id: str
     product_id: str
-    recipient_user_id: int
+    recipient_username: str
     status: str
     charge_id: str | None
+    currency: str
+    markup_percent: str
+    fragment_cost: str
+    customer_amount: str
+    fragment_amount: str | None
+    fragment_order_id: str | None
     delivery_json: str | None
     error_code: str | None
+    error_message: str | None
     created_at: str
     updated_at: str
 
@@ -28,14 +35,51 @@ class Order:
         return {
             "id": self.id,
             "product_id": self.product_id,
-            "recipient_user_id": self.recipient_user_id,
+            "recipient_username": self.recipient_username,
             "status": self.status,
             "charge_id": self.charge_id,
+            "currency": self.currency,
+            "markup_percent": self.markup_percent,
+            "fragment_cost": self.fragment_cost,
+            "customer_amount": self.customer_amount,
+            "fragment_amount": self.fragment_amount,
+            "fragment_order_id": self.fragment_order_id,
             "delivery_json": self.delivery_json,
             "error_code": self.error_code,
+            "error_message": self.error_message,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+
+
+_COLUMNS = (
+    "id",
+    "product_id",
+    "recipient_username",
+    "status",
+    "charge_id",
+    "currency",
+    "markup_percent",
+    "fragment_cost",
+    "customer_amount",
+    "fragment_amount",
+    "fragment_order_id",
+    "delivery_json",
+    "error_code",
+    "error_message",
+    "created_at",
+    "updated_at",
+)
+
+_MUTABLE = {
+    "status",
+    "charge_id",
+    "fragment_amount",
+    "fragment_order_id",
+    "delivery_json",
+    "error_code",
+    "error_message",
+}
 
 
 class OrderStore:
@@ -45,16 +89,31 @@ class OrderStore:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        rows = self._conn.execute("PRAGMA table_info(orders)").fetchall()
+        columns = {row[1] for row in rows}
+        if columns and "recipient_username" not in columns:
+            # Earlier skeleton stored a numeric Telegram id and could not buy Stars.
+            self._conn.execute("DROP TABLE orders")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS orders (
                 id TEXT PRIMARY KEY,
                 product_id TEXT NOT NULL,
-                recipient_user_id INTEGER NOT NULL,
+                recipient_username TEXT NOT NULL,
                 status TEXT NOT NULL,
                 charge_id TEXT,
+                currency TEXT NOT NULL,
+                markup_percent TEXT NOT NULL,
+                fragment_cost TEXT NOT NULL,
+                customer_amount TEXT NOT NULL,
+                fragment_amount TEXT,
+                fragment_order_id TEXT,
                 delivery_json TEXT,
                 error_code TEXT,
+                error_message TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -66,38 +125,39 @@ class OrderStore:
         with self._lock:
             self._conn.close()
 
-    def create(self, product_id: str, recipient_user_id: int) -> Order:
+    def create(
+        self,
+        *,
+        product_id: str,
+        recipient_username: str,
+        currency: str,
+        markup_percent: str,
+        fragment_cost: str,
+        customer_amount: str,
+    ) -> Order:
         now = utc_now()
         order = Order(
-            id=uuid.uuid4().hex,
+            id=str(uuid.uuid4()),
             product_id=product_id,
-            recipient_user_id=recipient_user_id,
+            recipient_username=recipient_username,
             status="pending_payment",
             charge_id=None,
+            currency=currency,
+            markup_percent=markup_percent,
+            fragment_cost=fragment_cost,
+            customer_amount=customer_amount,
+            fragment_amount=None,
+            fragment_order_id=None,
             delivery_json=None,
             error_code=None,
+            error_message=None,
             created_at=now,
             updated_at=now,
         )
         with self._lock:
             self._conn.execute(
-                """
-                INSERT INTO orders (
-                    id, product_id, recipient_user_id, status, charge_id,
-                    delivery_json, error_code, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    order.id,
-                    order.product_id,
-                    order.recipient_user_id,
-                    order.status,
-                    order.charge_id,
-                    order.delivery_json,
-                    order.error_code,
-                    order.created_at,
-                    order.updated_at,
-                ),
+                f"INSERT INTO orders ({', '.join(_COLUMNS)}) VALUES ({', '.join('?' for _ in _COLUMNS)})",
+                tuple(getattr(order, column) for column in _COLUMNS),
             )
             self._conn.commit()
         return order
@@ -110,66 +170,42 @@ class OrderStore:
     def mark_paid(self, order_id: str, charge_id: str) -> Order | None:
         now = utc_now()
         with self._lock:
-            cursor = self._conn.execute(
+            self._conn.execute(
                 """
                 UPDATE orders
-                SET status = 'paid', charge_id = ?, error_code = NULL, updated_at = ?
+                SET status = 'paid', charge_id = ?, error_code = NULL, error_message = NULL, updated_at = ?
                 WHERE id = ? AND status = 'pending_payment'
                 """,
                 (charge_id, now, order_id),
             )
             self._conn.commit()
-            if cursor.rowcount != 1:
-                row = self._conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
-                return self._row(row) if row else None
-            row = self._conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
-        return self._row(row)
-
-    def mark_fulfilled(self, order_id: str, delivery_json: str) -> Order | None:
-        now = utc_now()
-        with self._lock:
-            cursor = self._conn.execute(
-                """
-                UPDATE orders
-                SET status = 'fulfilled', delivery_json = ?, error_code = NULL, updated_at = ?
-                WHERE id = ? AND status = 'paid'
-                """,
-                (delivery_json, now, order_id),
-            )
-            self._conn.commit()
-            row = self._conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
-        if row is None:
-            return None
-        order = self._row(row)
-        if cursor.rowcount != 1 and order.status != "fulfilled":
-            return order
-        return order
-
-    def mark_rejected(self, order_id: str, error_code: str) -> Order | None:
-        now = utc_now()
-        with self._lock:
-            self._conn.execute(
-                """
-                UPDATE orders
-                SET error_code = ?, updated_at = ?
-                WHERE id = ? AND status = 'paid'
-                """,
-                (error_code, now, order_id),
-            )
-            self._conn.commit()
             row = self._conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         return self._row(row) if row else None
 
+    def transition(self, order_id: str, allowed: tuple[str, ...], **changes) -> tuple[Order, bool] | None:
+        unknown = set(changes) - _MUTABLE
+        if unknown:
+            raise ValueError(f"unexpected order fields: {sorted(unknown)}")
+        sets = ["updated_at = ?"]
+        params: list = [utc_now()]
+        for key, value in changes.items():
+            sets.append(f"{key} = ?")
+            params.append(value)
+        params.append(order_id)
+        params.extend(allowed)
+        marks = ", ".join("?" for _ in allowed)
+        with self._lock:
+            cursor = self._conn.execute(
+                f"UPDATE orders SET {', '.join(sets)} WHERE id = ? AND status IN ({marks})",
+                params,
+            )
+            self._conn.commit()
+            changed = cursor.rowcount == 1
+            row = self._conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+        if row is None:
+            return None
+        return self._row(row), changed
+
     @staticmethod
     def _row(row: sqlite3.Row) -> Order:
-        return Order(
-            id=row["id"],
-            product_id=row["product_id"],
-            recipient_user_id=row["recipient_user_id"],
-            status=row["status"],
-            charge_id=row["charge_id"],
-            delivery_json=row["delivery_json"],
-            error_code=row["error_code"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+        return Order(**{column: row[column] for column in _COLUMNS})
