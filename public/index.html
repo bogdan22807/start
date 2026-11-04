@@ -493,7 +493,7 @@
     const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
 
     const THEME_KEY = "shop-bg";
-    const PAY_NAMES = { card: "Банковская карта", cryptobot: "Crypto Bot", heleket: "Heleket" };
+    const INVOICE_KEY = "shop-invoice";
 
     function paintChrome(color) {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -835,30 +835,198 @@
     const topBar = document.querySelector(".top");
     const hero = document.querySelector(".hero");
 
+    let creating = false;
+    let watchGeneration = 0;
+
     function showShop() {
       paywall.hidden = true;
       stage.hidden = false;
       checkout.hidden = false;
       topBar.hidden = false;
       hero.hidden = false;
-      paynote.textContent = "";
-      paynote.classList.remove("show");
-      paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
     }
 
-    pay.addEventListener("click", () => {
-      const picked = selection();
-      if (!picked.ok) return;
+    function showPaywall(picked) {
       summary.textContent = picked.label + " для @" + picked.recipient + " · " + picked.total + " USDT";
-      paynote.textContent = "";
-      paynote.classList.remove("show");
-      paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
       stage.hidden = true;
       checkout.hidden = true;
       topBar.hidden = true;
       hero.hidden = true;
       paywall.hidden = false;
       burst();
+    }
+
+    function rememberInvoice(record) {
+      try { localStorage.setItem(INVOICE_KEY, JSON.stringify(record)); } catch (error) {}
+    }
+
+    function forgetInvoice() {
+      try { localStorage.removeItem(INVOICE_KEY); } catch (error) {}
+    }
+
+    function savedInvoice() {
+      try {
+        const raw = localStorage.getItem(INVOICE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function sameOrder(saved, picked) {
+      if (!saved || saved.kind !== picked.kind || saved.recipient !== picked.recipient) return false;
+      if (picked.kind === "premium") return Number(saved.months) === Number(picked.months);
+      return Number(saved.amount) === Number(picked.amount);
+    }
+
+    function showStatus(text) {
+      paynote.textContent = text;
+      paynote.classList.add("show");
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function readInvoice(invoiceId) {
+      try {
+        const response = await fetch("/api/invoice?id=" + encodeURIComponent(invoiceId));
+        const body = await response.json().catch(() => ({}));
+        return Object.assign({ ok: response.ok }, body);
+      } catch (error) {
+        return { ok: false };
+      }
+    }
+
+    function openInvoice(url) {
+      if (!url) return;
+      if (tg && typeof tg.openTelegramLink === "function") {
+        try { tg.openTelegramLink(url); return; } catch (error) {}
+      }
+      window.open(url, "_blank");
+    }
+
+    async function watchInvoice(invoiceId) {
+      const generation = ++watchGeneration;
+      for (let step = 0; step < 300; step += 1) {
+        if (generation !== watchGeneration) return;
+        if (step > 0) await sleep(3000);
+        if (generation !== watchGeneration) return;
+        const state = await readInvoice(invoiceId);
+        if (generation !== watchGeneration) return;
+        if (!state.ok) {
+          if (state.error && state.error !== "cryptopay_unavailable" && state.error !== "fragment_unavailable") {
+            showStatus(state.message || "Не удалось проверить оплату.");
+            return;
+          }
+          continue;
+        }
+        if (state.delivered) {
+          showStatus(state.message);
+          note.textContent = state.message;
+          note.classList.add("show");
+          forgetInvoice();
+          return;
+        }
+        if (state.paid && state.retry === false) {
+          showStatus(state.message);
+          forgetInvoice();
+          return;
+        }
+        if (state.paid) {
+          showStatus(state.message || "Оплата прошла. Отправляю покупку…");
+          continue;
+        }
+        if (state.status === "expired") {
+          showStatus(state.message || "Счёт истёк. Нажмите Crypto Bot ещё раз.");
+          forgetInvoice();
+          return;
+        }
+        showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+      }
+      showStatus("Если оплата уже прошла, откройте магазин снова: покупка отправится сама.");
+    }
+
+    async function startCryptoPay(picked) {
+      if (creating) return;
+      creating = true;
+      let watchId = "";
+      try {
+        const saved = savedInvoice();
+        let reuse = false;
+        if (saved && saved.id) {
+          const state = await readInvoice(saved.id);
+          if (state.ok && state.delivered) {
+            forgetInvoice();
+            showStatus(state.message);
+            reuse = true;
+          } else if (state.ok && state.paid) {
+            showStatus(state.message || "Оплата прошла. Отправляю покупку…");
+            watchId = saved.id;
+            reuse = true;
+          } else if (state.ok && state.status === "active" && sameOrder(saved, picked)) {
+            openInvoice(saved.url);
+            showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+            watchId = saved.id;
+            reuse = true;
+          } else if (!state.ok && state.error !== "invoice_not_found") {
+            showStatus(state.message || "Нет связи с магазином. Попробуйте ещё раз.");
+            watchId = saved.id;
+            reuse = true;
+          } else {
+            forgetInvoice();
+          }
+        }
+        if (!reuse) {
+          showStatus("Создаю счёт в Crypto Bot…");
+          let response;
+          try {
+            response = await fetch("/api/invoice", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                kind: picked.kind,
+                recipient: picked.recipient,
+                amount: picked.amount,
+                months: picked.months
+              })
+            });
+          } catch (error) {
+            response = null;
+            showStatus("Нет связи с магазином. Попробуйте ещё раз.");
+          }
+          if (response) {
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              showStatus(body.message || "Не удалось создать счёт.");
+            } else {
+              rememberInvoice({
+                id: body.invoice_id,
+                url: body.pay_url,
+                kind: body.kind,
+                recipient: body.recipient,
+                amount: body.amount,
+                months: body.months
+              });
+              openInvoice(body.pay_url);
+              showStatus("Оплатите счёт в Crypto Bot. После оплаты покупка уйдёт сама.");
+              watchId = body.invoice_id;
+            }
+          }
+        }
+      } finally {
+        creating = false;
+      }
+      if (watchId) await watchInvoice(watchId);
+    }
+
+    pay.addEventListener("click", () => {
+      const picked = selection();
+      if (!picked.ok) return;
+      paynote.textContent = "";
+      paynote.classList.remove("show");
+      paywall.querySelectorAll(".method").forEach((button) => button.classList.remove("on"));
+      showPaywall(picked);
     });
     document.getElementById("back").addEventListener("click", showShop);
     document.getElementById("theme").addEventListener("click", () => {
@@ -866,25 +1034,28 @@
     });
     paywall.addEventListener("click", (event) => {
       const button = event.target.closest(".method");
-      if (!button) return;
+      if (!button || creating) return;
       const picked = selection();
+      if (!picked.ok) return;
       paywall.querySelectorAll(".method").forEach((item) => item.classList.toggle("on", item === button));
-      const name = PAY_NAMES[button.dataset.pay] || button.dataset.pay;
-      paynote.textContent = "Выбрано: " + name + ". Деньги не списываются.";
-      paynote.classList.add("show");
-      const payload = {
-        kind: picked.kind,
-        recipient: picked.recipient,
-        total: picked.total,
-        pay: button.dataset.pay
-      };
-      if (picked.kind === "premium") payload.months = picked.months;
-      else payload.amount = picked.amount;
-      if (tg && typeof tg.sendData === "function") {
-        try { tg.sendData(JSON.stringify(payload)); } catch (error) {}
+      if (button.dataset.pay !== "cryptobot") {
+        showStatus("Сейчас оплата идёт через Crypto Bot. Карта и Heleket появятся позже.");
+        return;
       }
+      startCryptoPay(picked);
     });
     render();
+    const pending = savedInvoice();
+    if (pending && pending.id) {
+      showPaywall({
+        label: pending.kind === "premium" ? "Premium" : "Звёзды",
+        recipient: pending.recipient || "",
+        total: ""
+      });
+      summary.textContent = "Проверяю прошлый счёт";
+      showStatus("Проверяю оплату…");
+      watchInvoice(pending.id);
+    }
   </script>
 </body>
 </html>

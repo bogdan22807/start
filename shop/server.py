@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 _WEB_ROOT = (Path(__file__).resolve().parents[1] / "public").resolve()
 
+from shop.checkout import handle_request
 from shop.config import load_shop
 from shop.errors import ShopError
 from shop.orders import OrderStore
@@ -22,7 +23,12 @@ class ShopHandler(BaseHTTPRequestHandler):
     shop: Shop
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.rstrip("/") == "/api/invoice":
+            status, body = handle_request("GET", path, parsed.query, self.headers, b"")
+            self._send(status, body)
+            return
         page = _web_page(path)
         if page is not None:
             self._send_file(page)
@@ -56,6 +62,15 @@ class ShopHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.rstrip("/") in {"/api/invoice", "/api/cryptobot"}:
+            try:
+                raw = self._read_raw(65536)
+            except ShopError as exc:
+                self._send(exc.status, {"error": exc.code, "message": exc.message})
+                return
+            status, body = handle_request("POST", path, "", self.headers, raw)
+            self._send(status, body)
+            return
         try:
             payload = self._read_json()
             if path == "/orders":
@@ -107,11 +122,17 @@ class ShopHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         print(f"{self.address_string()} {fmt % args}")
 
-    def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
-        if length < 0 or length > MAX_BODY:
+    def _read_raw(self, limit: int = MAX_BODY) -> bytes:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError as exc:
+            raise ShopError("bad_request", "Слишком большое тело запроса.", 400) from exc
+        if length < 0 or length > limit:
             raise ShopError("bad_request", "Слишком большое тело запроса.", 400)
-        raw = self.rfile.read(length) if length else b"{}"
+        return self.rfile.read(length) if length else b""
+
+    def _read_json(self) -> dict:
+        raw = self._read_raw() or b"{}"
         body = json.loads(raw.decode())
         if not isinstance(body, dict):
             raise ShopError("bad_request", "JSON должен быть объектом.", 400)
@@ -132,6 +153,7 @@ class ShopHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
