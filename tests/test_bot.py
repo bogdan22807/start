@@ -160,6 +160,14 @@ class BotTests(unittest.TestCase):
         self.bot.handle(_message(10, "/start", username="@Bogdan22807", first_name="Богдан"))
         self.assertEqual(self.api.sent[-1]["link_buttons"][1][0], "💎 Купить премиум")
 
+    def test_stat_link_has_no_snapshot_with_supabase(self):
+        from unittest import mock
+        from shop.bot import admin_url
+
+        env = {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_KEY": "k", "STATS_SECRET": "s" * 40}
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(admin_url("https://shop.example"), "https://shop.example/admin.html")
+
     def test_other_messages_do_nothing(self):
         for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет", "privacy"):
             self.bot.handle(_message(10, text, username="alexdev"))

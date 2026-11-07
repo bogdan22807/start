@@ -5,7 +5,7 @@ import re
 import time
 
 from shop.errors import ShopError
-from shop.stats import build_report, is_admin, load_state, pack_snapshot, remember_user
+from shop.stats import build_report, is_admin, load_state, pack_snapshot, remember_user, supabase_ready
 from shop.telegram_api import TelegramApi
 from shop.tokens import telegram_bot_token
 
@@ -145,6 +145,8 @@ def privacy_url(app_url: str) -> str:
 
 def admin_url(app_url: str) -> str:
     base = app_url.rstrip("/") + "/admin.html"
+    if supabase_ready():
+        return base
     token = telegram_bot_token()
     if not token:
         return base
@@ -155,7 +157,7 @@ def admin_url(app_url: str) -> str:
         return base
     if not packed:
         return base
-    return base + "?s=" + packed + "#" + packed
+    return base + "?s=" + packed
 
 
 def stat_text() -> str:

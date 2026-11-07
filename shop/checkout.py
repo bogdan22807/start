@@ -377,9 +377,9 @@ def stat_response(body: dict) -> tuple[int, dict]:
     snapshot = None
     packed = body.get("snapshot") if isinstance(body.get("snapshot"), str) else ""
     if packed:
+        # Telegram appends its launch data to the link, which can spoil an old snapshot.
+        # A spoiled snapshot is skipped: the panel still shows the stored statistics.
         snapshot = unpack_snapshot(packed, token)
-        if snapshot is None:
-            raise ShopError("bad_snapshot", "Снимок статистики не сходится.", 400)
     from shop.stats import remember_user
 
     remember_user(profile["id"], profile.get("username") or "")

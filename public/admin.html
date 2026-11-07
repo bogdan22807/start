@@ -380,8 +380,8 @@
     }
 
     const params = new URLSearchParams(location.search);
-    const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
-    const snapshot = hash || params.get("s") || "";
+    // Telegram puts its own launch data (tgWebAppData=…) after "#", so the snapshot is read from ?s only.
+    const snapshot = params.get("s") || "";
     const initData = tg && tg.initData ? tg.initData : "";
 
     async function load() {
