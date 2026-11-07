@@ -27,14 +27,25 @@ class FakeApi:
     def set_commands(self):
         self.calls.append(("set_commands",))
 
+    def reset_commands(self):
+        self.calls.append(("reset_commands",))
+        self.public = ["start"]
+
+    def set_admin_commands(self, chat_id):
+        self.calls.append(("set_admin_commands", chat_id))
+
+    def get_commands(self, scope=None, language_code=""):
+        return list(getattr(self, "public", ["start", "stat"]))
+
     def set_menu_button(self, url):
         self.calls.append(("set_menu_button", url))
 
 
 class SetupTests(unittest.TestCase):
     def setUp(self):
-        self.saved = {k: os.environ.get(k) for k in ("WEBAPP_URL", "TELEGRAM_WEBHOOK_SECRET")}
+        self.saved = {k: os.environ.get(k) for k in ("WEBAPP_URL", "TELEGRAM_WEBHOOK_SECRET", "ADMIN_TELEGRAM_ID")}
         os.environ.pop("WEBAPP_URL", None)
+        os.environ["ADMIN_TELEGRAM_ID"] = "1470034143"
         os.environ["TELEGRAM_WEBHOOK_SECRET"] = "s3cret"
 
     def tearDown(self):
@@ -58,6 +69,10 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(api.calls[0], ("set_webhook", hook, "s3cret"))
         self.assertIn(("set_menu_button", "https://start-bogdan22807s-projects.vercel.app"), api.calls)
         self.assertEqual(report["after"]["url"], hook)
+        self.assertIn(("reset_commands",), api.calls)
+        self.assertIn(("set_admin_commands", 1470034143), api.calls)
+        self.assertEqual(report["commands_before"]["all_private_chats"], ["start", "stat"])
+        self.assertTrue(all(names == ["start"] for names in report["commands_after"].values()))
 
 
 if __name__ == "__main__":

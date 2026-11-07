@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from shop.bot import ShopBot, webapp_url
 from shop.errors import ShopError
-from shop.telegram_api import TelegramApi
+from shop.telegram_api import COMMAND_SCOPES, TelegramApi
 from shop.tokens import telegram_bot_token
 
 
@@ -89,11 +89,16 @@ def setup_webhook(apply: bool, api=None) -> dict:
     try:
         before = api.get_webhook_info()
         report["before"] = _webhook_summary(before, token)
+        report["commands_before"] = _commands(api)
         if apply:
             api.set_webhook(hook, os.environ.get("TELEGRAM_WEBHOOK_SECRET", ""))
-            api.set_commands()
+            api.reset_commands()
+            admin = os.environ.get("ADMIN_TELEGRAM_ID", "").strip()
+            if admin.isdigit():
+                api.set_admin_commands(int(admin))
             api.set_menu_button(webapp_url())
             report["after"] = _webhook_summary(api.get_webhook_info(), token)
+            report["commands_after"] = _commands(api)
     except ShopError as exc:
         report.update({"ok": False, "message": exc.message})
     return report
@@ -108,3 +113,17 @@ def _webhook_summary(info: dict, token: str = "") -> dict:
             url = url.replace(token, "***")
         summary["url"] = url or "(пусто: вебхука нет, бот работает через getUpdates где-то ещё)"
     return summary
+
+
+def _commands(api) -> dict:
+    """Command names everyone sees, per scope and language. The owner's own list is not shown."""
+    getter = getattr(api, "get_commands", None)
+    if getter is None:
+        return {}
+    seen: dict = {}
+    for scope in COMMAND_SCOPES[:2]:
+        for language in ("", "ru", "uk", "en"):
+            names = getter(scope, language)
+            key = scope["type"] + (f":{language}" if language else "")
+            seen[key] = names
+    return seen
