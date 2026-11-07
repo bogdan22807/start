@@ -9,7 +9,8 @@ from shop.stats import build_report, is_admin, load_state, pack_snapshot, rememb
 from shop.telegram_api import TelegramApi
 from shop.tokens import telegram_bot_token
 
-BUY_STARS = "Купить звезды"
+BUY_STARS = "⭐ Купить звезды"
+BUY_PREMIUM = "💎 Купить премиум"
 STAT_BUTTON = "📊 Статистика"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
 _ADMIN_COMMANDS: set[int] = set()
@@ -60,12 +61,31 @@ class ShopBot:
         if command != "/start":
             return
         raw_name = user.get("first_name") if isinstance(user.get("first_name"), str) else ""
+        self._reset_shop_buttons(chat_id)
         link = main_menu_link(self.api)
-        self.api.send_message(
-            chat_id,
-            welcome_text(raw_name),
-            link_button=(BUY_STARS, link) if link else None,
-        )
+        buttons = [(BUY_STARS, link + "=stars"), (BUY_PREMIUM, link + "=premium")] if link else None
+        self.api.send_message(chat_id, welcome_text(raw_name), link_buttons=buttons)
+
+    def _reset_shop_buttons(self, chat_id: int) -> None:
+        """Drop the old «Открыть магазин» keyboard and point the menu button at the working shop.
+
+        A keyboard web_app button opens the shop without the buyer's Telegram data, so payment
+        never starts there. Telegram keeps that keyboard until the bot removes it.
+        """
+        try:
+            sent = self.api.send_message(chat_id, "⏳", remove_keyboard=True)
+            message_id = sent.get("message_id") if isinstance(sent, dict) else None
+            deleter = getattr(self.api, "delete_message", None)
+            if deleter and isinstance(message_id, int):
+                deleter(chat_id, message_id)
+        except ShopError:
+            pass
+        setter = getattr(self.api, "set_chat_menu_button", None)
+        if setter:
+            try:
+                setter(chat_id, self.app_url)
+            except ShopError:
+                pass
 
     def run(self) -> None:
         offset = None
@@ -96,7 +116,7 @@ def main() -> None:
     try:
         api.delete_webhook()
         api.set_commands()
-        api.clear_menu_button()
+        api.set_menu_button(app_url)
     except ShopError as exc:
         print(f"telegram setup: {exc.message}")
     print("telegram bot polling")

@@ -13,6 +13,8 @@ class MemoryApi:
         self.sent = []
         self.answered = []
         self.admin_commands = []
+        self.deleted = []
+        self.menu_buttons = []
 
     def send_message(
         self,
@@ -25,6 +27,7 @@ class MemoryApi:
         remove_keyboard=False,
         open_button=None,
         link_button=None,
+        link_buttons=None,
     ):
         self.sent.append(
             {
@@ -37,8 +40,16 @@ class MemoryApi:
                 "remove_keyboard": remove_keyboard,
                 "open_button": open_button,
                 "link_button": link_button,
+                "link_buttons": link_buttons,
             }
         )
+        return {"message_id": len(self.sent)}
+
+    def delete_message(self, chat_id, message_id):
+        self.deleted.append((chat_id, message_id))
+
+    def set_chat_menu_button(self, chat_id, url):
+        self.menu_buttons.append((chat_id, url))
 
     def answer_callback(self, callback_id):
         self.answered.append(callback_id)
@@ -89,11 +100,24 @@ class BotTests(unittest.TestCase):
         sent = self.api.sent[-1]
         self.assertEqual(sent["text"], welcome_text("Богдан"))
         self.assertIn("кнопки ниже", sent["text"])
-        self.assertEqual(sent["link_button"], ("Купить звезды", "https://t.me/TraffyStarsBot?startapp"))
+        self.assertEqual(
+            sent["link_buttons"],
+            [
+                ("⭐ Купить звезды", "https://t.me/TraffyStarsBot?startapp=stars"),
+                ("💎 Купить премиум", "https://t.me/TraffyStarsBot?startapp=premium"),
+            ],
+        )
         self.assertIsNone(sent["open_button"])
         self.assertIsNone(sent["app_button"])
         self.assertFalse(sent["remove_keyboard"])
         self.assertNotIn("Открыть магазин", sent["text"])
+
+    def test_start_removes_the_old_keyboard_and_fixes_the_menu_button(self):
+        self.bot.handle(_message(10, "/start", first_name="Богдан"))
+        cleaner = self.api.sent[0]
+        self.assertTrue(cleaner["remove_keyboard"])
+        self.assertEqual(self.api.deleted, [(10, 1)])
+        self.assertEqual(self.api.menu_buttons, [(10, "https://shop.example")])
 
     def test_start_without_a_name_uses_a_fallback(self):
         self.bot.handle(_message(10, "/start", first_name=""))
@@ -102,7 +126,7 @@ class BotTests(unittest.TestCase):
     def test_start_at_mention_uses_the_same_screen(self):
         self.bot.handle(_message(10, "/start@ShopBot", first_name="Анна"))
         sent = self.api.sent[-1]
-        self.assertEqual(sent["link_button"], ("Купить звезды", "https://t.me/TraffyStarsBot?startapp"))
+        self.assertEqual(sent["link_buttons"][0], ("⭐ Купить звезды", "https://t.me/TraffyStarsBot?startapp=stars"))
         self.assertIsNone(sent["app_button"])
 
     def test_stat_is_silent_for_everyone_except_the_admin(self):
@@ -121,7 +145,7 @@ class BotTests(unittest.TestCase):
         self.assertTrue(sent["open_button"][1].startswith("https://shop.example/admin.html"))
         self.assertEqual(self.api.admin_commands, [10])
         self.bot.handle(_message(10, "/start", username="@Bogdan22807", first_name="Богдан"))
-        self.assertEqual(self.api.sent[-1]["link_button"][0], "Купить звезды")
+        self.assertEqual(self.api.sent[-1]["link_buttons"][1][0], "💎 Купить премиум")
 
     def test_other_messages_do_nothing(self):
         for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет"):
@@ -178,6 +202,7 @@ class BotTests(unittest.TestCase):
         self.assertIn("/api/invoice", page)
         self.assertIn("init_data", page)
         self.assertIn("openTelegramLink", page)
+        self.assertIn("start_param", page)
         self.assertNotIn('id="openPay"', page)
         self.assertNotIn("деньги не списываются", folded)
         self.assertNotIn("украин", folded)
