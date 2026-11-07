@@ -119,6 +119,19 @@ class BotTests(unittest.TestCase):
         self.assertEqual(self.api.deleted, [(10, 1)])
         self.assertEqual(self.api.menu_buttons, [(10, "https://shop.example")])
 
+    def test_privacy_sends_the_policy_link(self):
+        self.bot.handle(_message(10, "/privacy"))
+        sent = self.api.sent[-1]
+        self.assertIn("Политика конфиденциальности", sent["text"])
+        self.assertEqual(sent["link_buttons"], [("Открыть политику", "https://shop.example/privacy")])
+
+    def test_privacy_page_covers_data_partners_and_rights(self):
+        page = Path(__file__).parents[1].joinpath("public/privacy.html").read_text(encoding="utf-8")
+        for word in ("Telegram ID", "Fragment", "Crypto Bot", "monobank", "Vercel", "Supabase", "@Bogdan22807", "удалить"):
+            self.assertIn(word, page)
+        shop = Path(__file__).parents[1].joinpath("public/index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/privacy"', shop)
+
     def test_start_without_a_name_uses_a_fallback(self):
         self.bot.handle(_message(10, "/start", first_name=""))
         self.assertIn("Добро пожаловать, друг", self.api.sent[-1]["text"])
@@ -148,7 +161,7 @@ class BotTests(unittest.TestCase):
         self.assertEqual(self.api.sent[-1]["link_buttons"][1][0], "💎 Купить премиум")
 
     def test_other_messages_do_nothing(self):
-        for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет"):
+        for text in ("/catalog", "/id", "/cancel", "/paid 1", "⭐ Купить Звёзды", "привет", "privacy"):
             self.bot.handle(_message(10, text, username="alexdev"))
         self.bot.handle(_callback(10, "alexdev", "p:self"))
         self.bot.handle(

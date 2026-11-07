@@ -4,6 +4,12 @@ Users are people who wrote to the bot. Orders are payments the provider
 confirmed. Amounts stay in USDT, including card payments, so the periods
 can be compared. Crypto Pay invoices are merged in when the panel is built,
 because that list survives a restart of the server.
+
+On Vercel the files are not kept between runs, so users and orders go to
+Supabase when SUPABASE_URL, SUPABASE_KEY and STATS_SECRET are set. The tables
+live in a private "shop" schema; the server reaches them only through
+shop_* functions that check STATS_SECRET. Without those variables (local
+runs, tests) the same data goes to SQLite.
 """
 
 import base64
@@ -13,6 +19,8 @@ import json
 import os
 import sqlite3
 import threading
+import urllib.error
+import urllib.request
 import zlib
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -44,6 +52,9 @@ _MONTHS_FULL = (
 def is_admin(user: dict | None) -> bool:
     if not isinstance(user, dict):
         return False
+    pinned = os.environ.get("ADMIN_TELEGRAM_ID", "").strip()
+    if pinned.isdigit():
+        return _user_id(user.get("id")) == int(pinned)
     username = user.get("username")
     if not isinstance(username, str):
         return False
@@ -60,6 +71,9 @@ def remember_user(user_id: object, username: str = "") -> None:
     if uid is None:
         return
     name = username.lstrip("@")[:32] if isinstance(username, str) else ""
+    if supabase_ready():
+        _rpc("shop_remember_user", {"p_id": uid, "p_username": name})
+        return
     now = _iso(datetime.now(timezone.utc))
     with _LOCK:
         conn = _connect()
@@ -84,7 +98,17 @@ def remember_user(user_id: object, username: str = "") -> None:
             conn.close()
 
 
-def remember_invoice(invoice_id: object, *, user_id: object, amount: object, source: str, paid: bool) -> None:
+def remember_invoice(
+    invoice_id: object,
+    *,
+    user_id: object,
+    amount: object,
+    source: str,
+    paid: bool,
+    kind: str | None = None,
+    quantity: object = None,
+    recipient: str | None = None,
+) -> None:
     text = _invoice_id(invoice_id)
     price = _amount(amount)
     if not text or price is None:
@@ -92,6 +116,24 @@ def remember_invoice(invoice_id: object, *, user_id: object, amount: object, sou
     uid = _user_id(user_id)
     now = _iso(datetime.now(timezone.utc))
     origin = source if source in {"card", "cryptobot"} else "cryptobot"
+    product = kind if kind in {"stars", "premium"} else None
+    count = _count(quantity) or None
+    who = recipient.lstrip("@")[:32] if isinstance(recipient, str) and recipient.strip() else None
+    if supabase_ready():
+        _rpc(
+            "shop_remember_invoice",
+            {
+                "p_id": text,
+                "p_user_id": uid,
+                "p_amount": price,
+                "p_source": origin,
+                "p_paid": bool(paid),
+                "p_kind": product,
+                "p_quantity": count,
+                "p_recipient": who,
+            },
+        )
+        return
     with _LOCK:
         conn = _connect()
         try:
@@ -99,10 +141,10 @@ def remember_invoice(invoice_id: object, *, user_id: object, amount: object, sou
             if row is None:
                 conn.execute(
                     """
-                    INSERT INTO orders (id, user_id, amount, status, source, created_at, paid_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO orders (id, user_id, amount, status, source, created_at, paid_at, kind, quantity, recipient)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (text, uid, price, "paid" if paid else "created", origin, now, now if paid else None),
+                    (text, uid, price, "paid" if paid else "created", origin, now, now if paid else None, product, count, who),
                 )
             elif paid and row["status"] != "paid":
                 conn.execute(
@@ -121,6 +163,13 @@ def remember_invoice(invoice_id: object, *, user_id: object, amount: object, sou
 
 
 def load_state() -> tuple[list[dict], list[dict]]:
+    if supabase_ready():
+        state = _rpc("shop_load_state", {})
+        if not isinstance(state, dict):
+            return [], []
+        users = state.get("users") if isinstance(state.get("users"), list) else []
+        orders = state.get("orders") if isinstance(state.get("orders"), list) else []
+        return [item for item in users if isinstance(item, dict)], [item for item in orders if isinstance(item, dict)]
     try:
         with _LOCK:
             conn = _connect()
@@ -128,7 +177,9 @@ def load_state() -> tuple[list[dict], list[dict]]:
                 users = [dict(row) for row in conn.execute("SELECT id, username, first_seen FROM users")]
                 orders = [
                     dict(row)
-                    for row in conn.execute("SELECT id, user_id, amount, status, created_at, paid_at FROM orders")
+                    for row in conn.execute(
+                        "SELECT id, user_id, amount, status, source, kind, quantity, recipient, created_at, paid_at FROM orders"
+                    )
                 ]
             finally:
                 conn.close()
@@ -245,7 +296,12 @@ def build_report(
             supplied.get(name) if isinstance(supplied.get(name), dict) else None,
             local_now,
         )
-    return {"currency": "USDT", "periods": periods}
+    return {
+        "currency": "USDT",
+        "periods": periods,
+        "recent": _recent(paid, users),
+        "storage": "supabase" if supabase_ready() else "sqlite",
+    }
 
 
 def _apply_official(period: dict, official: dict | None, local_now: datetime) -> dict:
@@ -292,7 +348,15 @@ def _add_ledger_orders(paid: dict[str, dict], orders: list[dict]) -> None:
         when = _parse_time(item.get("paid_at") or item.get("created_at"))
         price = _amount(item.get("amount"))
         if text and when and price is not None:
-            paid[text] = {"at": when, "amount": Decimal(price), "user_id": _user_id(item.get("user_id"))}
+            paid[text] = {
+                "at": when,
+                "amount": Decimal(price),
+                "user_id": _user_id(item.get("user_id")),
+                "kind": item.get("kind") if item.get("kind") in {"stars", "premium"} else None,
+                "quantity": _count(item.get("quantity")) or None,
+                "recipient": item.get("recipient") if isinstance(item.get("recipient"), str) else None,
+                "source": item.get("source") if item.get("source") in {"card", "cryptobot"} else None,
+            }
 
 
 def _add_snapshot(known: dict[int, datetime], paid: dict[str, dict], snapshot: dict) -> None:
@@ -331,8 +395,24 @@ def _add_crypto(known: dict[int, datetime], paid: dict[str, dict], invoices: lis
         text = _invoice_id(item.get("invoice_id"))
         when = _parse_time(item.get("paid_at")) or created
         price = _amount(item.get("amount"))
-        if text and when and price is not None and text not in paid:
-            paid[text] = {"at": when, "amount": Decimal(price), "user_id": buyer}
+        if text and when and price is not None:
+            details = _payload_order(item.get("payload"))
+            entry = paid.get(text)
+            if entry is None:
+                paid[text] = {
+                    "at": when,
+                    "amount": Decimal(price),
+                    "user_id": buyer,
+                    "kind": details.get("kind"),
+                    "quantity": details.get("quantity"),
+                    "recipient": details.get("recipient"),
+                    "source": "cryptobot",
+                }
+            else:
+                for key in ("kind", "quantity", "recipient"):
+                    if not entry.get(key) and details.get(key):
+                        entry[key] = details[key]
+                entry["source"] = entry.get("source") or "cryptobot"
 
 
 def _period(name: str, known: dict[int, datetime], paid: dict[str, dict], extra: int, local_now: datetime) -> dict:
@@ -342,7 +422,51 @@ def _period(name: str, known: dict[int, datetime], paid: dict[str, dict], extra:
     total = sum((item["amount"] for item in orders), Decimal("0.00"))
     points = _points(name, known, paid, start, local_now)
     count = len(users) + (extra if name == "all" else 0)
-    return {"users": count, "orders": len(orders), "sum": _money(total), "points": points}
+    average = total / len(orders) if orders else Decimal("0.00")
+    return {
+        "users": count,
+        "orders": len(orders),
+        "sum": _money(total),
+        "average": _money(average),
+        "products": _split(orders, "kind", ("stars", "premium")),
+        "sources": _split(orders, "source", ("card", "cryptobot")),
+        "stars": sum(item.get("quantity") or 0 for item in orders if item.get("kind") == "stars"),
+        "points": points,
+    }
+
+
+def _split(orders: list[dict], key: str, names: tuple[str, ...]) -> dict:
+    result = {}
+    for name in names:
+        chosen = [item for item in orders if item.get(key) == name]
+        result[name] = {"orders": len(chosen), "sum": _money(sum((item["amount"] for item in chosen), Decimal("0.00")))}
+    return result
+
+
+def _recent(paid: dict[str, dict], users: list[dict], limit: int = 20) -> list[dict]:
+    names = {}
+    for item in users:
+        uid = _user_id(item.get("id"))
+        if uid and isinstance(item.get("username"), str) and item["username"]:
+            names[uid] = item["username"]
+    rows = sorted(paid.items(), key=lambda pair: pair[1]["at"], reverse=True)[:limit]
+    result = []
+    for invoice_id, item in rows:
+        local = item["at"].astimezone(ZONE)
+        result.append(
+            {
+                "id": invoice_id,
+                "at": local.isoformat(),
+                "when": f"{local.day} {_MONTHS[local.month - 1]}, {local:%H:%M}",
+                "amount": _money(item["amount"]),
+                "kind": item.get("kind"),
+                "quantity": item.get("quantity"),
+                "recipient": item.get("recipient"),
+                "source": item.get("source"),
+                "buyer": names.get(item.get("user_id")) or "",
+            }
+        )
+    return result
 
 
 def _window_start(name: str, local_now: datetime) -> datetime | None:
@@ -483,7 +607,85 @@ def _connect() -> sqlite3.Connection:
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
+    for name, kind in (("kind", "TEXT"), ("quantity", "INTEGER"), ("recipient", "TEXT")):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {kind}")
     return conn
+
+
+def storage_health() -> dict:
+    """Only says whether statistics are saved; no numbers or names, because the check link is public."""
+    if not supabase_ready():
+        return {"storage": "sqlite", "ok": False}
+    state = _rpc("shop_load_state", {})
+    return {"storage": "supabase", "ok": isinstance(state, dict)}
+
+
+def supabase_ready() -> bool:
+    return bool(_supabase_url() and _supabase_key() and _stats_secret())
+
+
+def _supabase_url() -> str:
+    value = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    return value if value.startswith("https://") else ""
+
+
+def _supabase_key() -> str:
+    for name in ("SUPABASE_KEY", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _stats_secret() -> str:
+    value = os.environ.get("STATS_SECRET", "").strip()
+    return value if len(value) >= 32 else ""
+
+
+def _rpc(name: str, params: dict):
+    """Call a shop_* function in Supabase. Statistics must never break a purchase, so errors return None."""
+    body = dict(params)
+    body["p_secret"] = _stats_secret()
+    key = _supabase_key()
+    headers = {"Content-Type": "application/json", "apikey": key}
+    if key.startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+    try:
+        status, payload = _post_json(f"{_supabase_url()}/rest/v1/rpc/{name}", headers, body)
+    except Exception as exc:
+        print(f"stats: {name} failed: {exc.__class__.__name__}")
+        return None
+    if status >= 300:
+        print(f"stats: {name} returned {status}")
+        return None
+    return payload
+
+
+def _post_json(url: str, headers: dict, body: dict) -> tuple[int, object]:
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            raw = response.read(5_000_000)
+            return response.status, json.loads(raw.decode()) if raw.strip() else None
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+
+
+def _payload_order(payload: object) -> dict:
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(payload, dict):
+        return {}
+    order = payload.get("order") if isinstance(payload.get("order"), dict) else payload
+    kind = order.get("kind") if order.get("kind") in {"stars", "premium"} else None
+    quantity = _count(order.get("amount") if kind == "stars" else order.get("months")) or None
+    recipient = order.get("recipient") if isinstance(order.get("recipient"), str) else None
+    return {"kind": kind, "quantity": quantity, "recipient": recipient}
 
 
 def _payload_buyer(payload: object) -> int | None:

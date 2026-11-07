@@ -348,7 +348,16 @@ def _note_invoice(invoice_id: object, order: dict, source: str, *, paid: bool) -
 
         if order.get("buyer_id"):
             remember_user(order.get("buyer_id"), order.get("buyer_username") or "")
-        remember_invoice(invoice_id, user_id=order.get("buyer_id"), amount=order.get("total"), source=source, paid=paid)
+        remember_invoice(
+            invoice_id,
+            user_id=order.get("buyer_id"),
+            amount=order.get("total"),
+            source=source,
+            paid=paid,
+            kind=order.get("kind"),
+            quantity=order.get("amount") if order.get("kind") == "stars" else order.get("months"),
+            recipient=order.get("recipient"),
+        )
     except Exception:
         return
 

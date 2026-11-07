@@ -4,7 +4,8 @@
   "buildCommand": "mkdir -p .vercel-out && cp -R public/. .vercel-out/",
   "outputDirectory": ".vercel-out",
   "rewrites": [
-    {"source": "/admin", "destination": "/admin.html"}
+    {"source": "/admin", "destination": "/admin.html"},
+    {"source": "/privacy", "destination": "/privacy.html"}
   ],
   "functions": {
     "api/**/*.py": {

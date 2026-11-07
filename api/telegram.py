@@ -81,6 +81,12 @@ def setup_webhook(apply: bool, api=None) -> dict:
     hook = webapp_url().rstrip("/") + "/api/telegram"
     report: dict = {"ok": True, "webhook": hook}
     try:
+        from shop.stats import storage_health
+
+        report["stats"] = storage_health()
+    except Exception:
+        report["stats"] = {"ok": False}
+    try:
         before = api.get_webhook_info()
         report["before"] = _webhook_summary(before, token)
         if apply:

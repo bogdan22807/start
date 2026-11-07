@@ -12,6 +12,7 @@ from shop.tokens import telegram_bot_token
 BUY_STARS = "⭐ Купить звезды"
 BUY_PREMIUM = "💎 Купить премиум"
 STAT_BUTTON = "📊 Статистика"
+PRIVACY_BUTTON = "Открыть политику"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
 _ADMIN_COMMANDS: set[int] = set()
 
@@ -56,6 +57,13 @@ class ShopBot:
                 chat_id,
                 stat_text(),
                 open_button=(STAT_BUTTON, admin_url(self.app_url)),
+            )
+            return
+        if command == "/privacy":
+            self.api.send_message(
+                chat_id,
+                "🔒 Политика конфиденциальности: какие данные мы получаем, зачем и как их удалить.",
+                link_buttons=[(PRIVACY_BUTTON, privacy_url(self.app_url))],
             )
             return
         if command != "/start":
@@ -131,6 +139,10 @@ def main_menu_link(api) -> str:
     return ""
 
 
+def privacy_url(app_url: str) -> str:
+    return app_url.rstrip("/") + "/privacy"
+
+
 def admin_url(app_url: str) -> str:
     base = app_url.rstrip("/") + "/admin.html"
     token = telegram_bot_token()
@@ -150,13 +162,17 @@ def stat_text() -> str:
     try:
         report = build_report(*load_state())
         entire = report["periods"]["all"]
+        today = report["periods"]["1"]
     except Exception:
         entire = {"users": 0, "orders": 0, "sum": "0.00"}
+        today = {"users": 0, "orders": 0, "sum": "0.00"}
     return (
         "📊 Статистика\n\n"
+        f"Сегодня: {today['orders']} заказов · {today['sum']} USDT · +{today['users']} польз.\n\n"
         f"👤 Пользователи: {entire['users']}\n"
         f"⭐ Заказы: {entire['orders']}\n"
-        f"💰 Сумма: {entire['sum']} USDT"
+        f"💰 Сумма: {entire['sum']} USDT\n\n"
+        "Подробно — кнопкой ниже 👇"
     )
 
 

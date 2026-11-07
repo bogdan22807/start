@@ -347,6 +347,8 @@
       text-align: center;
     }
     .note.show { animation: rise .35s both; }
+    .legal { margin: 12px 0 0; text-align: center; font-size: 12px; line-height: 1.4; color: var(--muted); }
+    .legal a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
     @keyframes rise {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: none; }
@@ -462,6 +464,7 @@
         <span><span class="name">Heleket</span><span class="sub">Временно недоступна</span></span>
       </button>
       <p class="note" id="paynote"></p>
+      <p class="legal">Выбирая оплату, вы соглашаетесь с <a href="/privacy" data-legal>политикой конфиденциальности</a></p>
     </section>
     </div>
     <div class="checkout">
@@ -469,6 +472,7 @@
       <div class="burst" id="burst"></div>
       <button type="button" id="pay">Оплатить 18.75 USDT</button>
       <p class="note" id="note"></p>
+      <p class="legal"><a href="/privacy" data-legal>Политика конфиденциальности</a></p>
     </div>
   </main>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -1072,6 +1076,12 @@
         return;
       }
       startPayment(picked, button.dataset.pay === "card" ? "card" : "cryptobot");
+    });
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest("a[data-legal]");
+      if (!link || !tg || typeof tg.openLink !== "function") return;
+      event.preventDefault();
+      try { tg.openLink(link.href); } catch (error) { window.location.href = link.href; }
     });
     async function sendPaidOrders() {
       try {
