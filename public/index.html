@@ -230,8 +230,13 @@
       font-weight: 760;
       letter-spacing: -0.03em;
     }
-    .card .ico { width: 16px; height: 16px; }
-    .card.on .ico { animation: pop .4s cubic-bezier(.2, .8, .2, 1); }
+    .card .ico { width: 16px; height: 16px; animation: twinkle 3.2s ease-in-out infinite; }
+    .card:nth-child(2) .ico { animation-delay: -.5s; }
+    .card:nth-child(3) .ico { animation-delay: -1.1s; }
+    .card:nth-child(4) .ico { animation-delay: -1.6s; }
+    .card:nth-child(5) .ico { animation-delay: -2.2s; }
+    .card:nth-child(6) .ico { animation-delay: -2.7s; }
+    .card.on .ico { animation: spin-pop .55s cubic-bezier(.2, .8, .2, 1), twinkle 1.6s .55s ease-in-out infinite; }
     .price { margin-top: 3px; font-size: 12px; }
     .plan {
       width: 100%;
@@ -241,7 +246,10 @@
       padding: 7px 12px;
       text-align: left;
     }
-    .plan .ico { width: 22px; height: 22px; flex: none; }
+    .plan .ico { width: 22px; height: 22px; flex: none; animation: glow 3s ease-in-out infinite; }
+    .plan:nth-child(2) .ico { animation-delay: -1s; }
+    .plan:nth-child(3) .ico { animation-delay: -2s; }
+    .plan.on .ico { animation: spin-pop .55s cubic-bezier(.2, .8, .2, 1), glow 1.8s .55s ease-in-out infinite; }
     .plan .name { display: block; font-weight: 700; }
     .plan .sum { margin-left: auto; font-weight: 760; letter-spacing: -0.03em; }
     .custom { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
@@ -314,6 +322,13 @@
     .method .ico { width: 32px; height: 32px; flex: none; object-fit: contain; }
     .method .ico.card { width: 52px; height: 34px; }
     .method .ico.heleket { width: 24px; height: 28px; }
+    .method .ico { animation: bob 3.4s ease-in-out infinite; }
+    .method[data-pay="cryptobot"] .ico { animation-delay: -1.1s; }
+    .method[data-pay="heleket"] .ico { animation: none; opacity: .55; }
+    .method .ico.card { animation-name: tilt; }
+    .method.on .ico { animation: pop .4s cubic-bezier(.2, .8, .2, 1), bob 1.8s .4s ease-in-out infinite; }
+    #theme .sun { animation: turn 12s linear infinite; }
+    #theme .moon { animation: rock 4s ease-in-out infinite; transform-origin: 50% 50%; }
     .method .name { display: block; font-weight: 700; }
     .method .sub { display: block; }
     .method.on {
@@ -370,6 +385,33 @@
       0%, 55% { transform: translateX(-130%); }
       100% { transform: translateX(130%); }
     }
+    @keyframes twinkle {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      40% { transform: rotate(-12deg) scale(1.12); }
+      60% { transform: rotate(8deg) scale(.96); }
+    }
+    @keyframes glow {
+      0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(27, 134, 238, 0)); }
+      50% { transform: translateY(-2px) scale(1.06); filter: drop-shadow(0 2px 6px rgba(27, 134, 238, .55)); }
+    }
+    @keyframes spin-pop {
+      0% { transform: scale(.7) rotate(-90deg); }
+      60% { transform: scale(1.25) rotate(15deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes tilt {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-5deg) translateY(-1px); }
+    }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    @keyframes rock {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-14deg); }
+    }
     @keyframes fly {
       to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; }
     }
@@ -385,12 +427,24 @@
   <svg class="sprite" aria-hidden="true">
     <symbol id="star" viewBox="0 0 64 64">
       <path fill="#FACE13" d="M32 4.2 39.6 20.8 57.4 22.6 44.2 34.4 48 51.8 32 43.2 16 51.8 19.8 34.4 6.6 22.6 24.4 20.8Z"/>
-      <path fill="#fff" fill-opacity=".5" d="M32 12.2 35.2 19.4 37.4 19.8 33.2 23.8 34.2 26.4 32 24.6 29.8 26.4 30.6 23.6 26.8 20.2 29.4 19.6Z"/>
+      <path fill="#fff" fill-opacity=".5" d="M32 12.2 35.2 19.4 37.4 19.8 33.2 23.8 34.2 26.4 32 24.6 29.8 26.4 30.6 23.6 26.8 20.2 29.4 19.6Z">
+        <animate attributeName="fill-opacity" values=".2;.85;.2" dur="2.4s" repeatCount="indefinite"/>
+      </path>
+      <path fill="#fff" d="M48 8l1.6 3.6L53 13l-3.4 1.4L48 18l-1.6-3.6L43 13l3.4-1.4Z" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;.55;.7;.85;1" dur="3s" repeatCount="indefinite"/>
+      </path>
     </symbol>
     <symbol id="gem" viewBox="0 0 64 64">
       <path fill="#1B86EE" d="M32 6 54 26 32 58 10 26Z"/>
-      <path fill="#fff" fill-opacity=".72" d="M32 6 44 26 32 18 20 26Z"/>
-      <path fill="#0E5EAE" fill-opacity=".35" d="M32 58 10 26h22Z"/>
+      <path fill="#fff" fill-opacity=".72" d="M32 6 44 26 32 18 20 26Z">
+        <animate attributeName="fill-opacity" values=".45;.95;.45" dur="2.6s" repeatCount="indefinite"/>
+      </path>
+      <path fill="#0E5EAE" fill-opacity=".35" d="M32 58 10 26h22Z">
+        <animate attributeName="fill-opacity" values=".2;.5;.2" dur="2.6s" begin="1.3s" repeatCount="indefinite"/>
+      </path>
+      <path fill="#fff" d="M50 8l1.4 3.2L54.6 12.6l-3.2 1.4L50 17.2l-1.4-3.2L45.4 12.6l3.2-1.4Z" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;.5;.65;.8;1" dur="3.4s" repeatCount="indefinite"/>
+      </path>
     </symbol>
   </svg>
   <main class="app" id="app">
@@ -1110,6 +1164,11 @@
       if (param === "premium" || param === "stars") state.product = param;
     }
 
+    try {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        document.querySelectorAll("svg.sprite").forEach((svg) => { if (svg.pauseAnimations) svg.pauseAnimations(); });
+      }
+    } catch (error) {}
     startProduct();
     render();
     sendPaidOrders();
