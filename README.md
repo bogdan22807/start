@@ -55,6 +55,8 @@ https://start-bogdan22807s-projects.vercel.app
 BOT_TOKEN='токен из BotFather' python3 -m shop.bot
 ```
 
+На Vercel бот работает через вебхук `/api/telegram`. Чтобы Telegram слал сообщения туда, откройте один раз в браузере `https://start-bogdan22807s-projects.vercel.app/api/telegram?setup=1`. Это ставит вебхук (с `TELEGRAM_WEBHOOK_SECRET`), команды и кнопку меню «Открыть магазин» и показывает, куда сообщения шли раньше (`before`) и теперь (`after`). Только посмотреть, без изменений: `?check=1`. Если где-то ещё запущен `python3 -m shop.bot`, остановите его: он снимает вебхук.
+
 Пока в терминале нет строки `telegram bot polling`, сообщение `/start` никуда не доходит. Кнопка меню «Магазин» при этом ставится в Telegram отдельно и открывает ссылку выше.
 
 ## HTTP-сервер
