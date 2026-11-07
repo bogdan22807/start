@@ -242,9 +242,11 @@ class StatsTests(unittest.TestCase):
             stat_response({"init_data": _init_data(TOKEN, 5, "alexdev")})
         self.assertEqual(denied.exception.status, 403)
         self.assertEqual(denied.exception.message, "Эта панель только для администратора.")
-        with self.assertRaises(ShopError) as broken:
-            stat_response({"init_data": _init_data(TOKEN, 7, "Bogdan22807"), "snapshot": "broken.signature"})
-        self.assertEqual(broken.exception.status, 400)
+        status, spoiled = stat_response(
+            {"init_data": _init_data(TOKEN, 7, "Bogdan22807"), "snapshot": "packed#tgWebAppData=query_id%3DAAA"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(spoiled["periods"]["all"]["orders"], 1)
         status, body = stat_response({"init_data": _init_data(TOKEN, 7, "Bogdan22807")})
         self.assertEqual(status, 200)
         self.assertEqual(body["periods"]["all"]["orders"], 1)
