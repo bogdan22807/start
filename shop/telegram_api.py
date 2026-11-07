@@ -99,6 +99,20 @@ class TelegramApi:
         result = self._call("getMe", {})
         return result if isinstance(result, dict) else {}
 
+    def set_webhook(self, url: str, secret: str = "") -> None:
+        payload: dict = {
+            "url": url,
+            "allowed_updates": ["message", "callback_query"],
+            "drop_pending_updates": False,
+        }
+        if secret:
+            payload["secret_token"] = secret
+        self._call("setWebhook", payload)
+
+    def get_webhook_info(self) -> dict:
+        result = self._call("getWebhookInfo", {})
+        return result if isinstance(result, dict) else {}
+
     def delete_webhook(self) -> None:
         self._call("deleteWebhook", {"drop_pending_updates": False})
 
