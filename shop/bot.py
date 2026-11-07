@@ -12,6 +12,7 @@ from shop.tokens import telegram_bot_token
 BUY_STARS = "⭐ Купить звезды"
 BUY_PREMIUM = "💎 Купить премиум"
 STAT_BUTTON = "📊 Статистика"
+PRIVACY_BUTTON = "Открыть политику"
 _DEFAULT_APP = "https://start-bogdan22807s-projects.vercel.app"
 _ADMIN_COMMANDS: set[int] = set()
 
@@ -56,6 +57,13 @@ class ShopBot:
                 chat_id,
                 stat_text(),
                 open_button=(STAT_BUTTON, admin_url(self.app_url)),
+            )
+            return
+        if command == "/privacy":
+            self.api.send_message(
+                chat_id,
+                "🔒 Политика конфиденциальности: какие данные мы получаем, зачем и как их удалить.",
+                link_buttons=[(PRIVACY_BUTTON, privacy_url(self.app_url))],
             )
             return
         if command != "/start":
@@ -129,6 +137,10 @@ def main_menu_link(api) -> str:
     if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
         return f"https://t.me/{username}?startapp"
     return ""
+
+
+def privacy_url(app_url: str) -> str:
+    return app_url.rstrip("/") + "/privacy"
 
 
 def admin_url(app_url: str) -> str:

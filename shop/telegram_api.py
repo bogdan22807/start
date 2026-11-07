@@ -131,6 +131,7 @@ class TelegramApi:
             {
                 "commands": [
                     {"command": "start", "description": "Купить звезды"},
+                    {"command": "privacy", "description": "Политика конфиденциальности"},
                 ]
             },
         )
@@ -142,6 +143,7 @@ class TelegramApi:
                 "scope": {"type": "chat", "chat_id": chat_id},
                 "commands": [
                     {"command": "start", "description": "Купить звезды"},
+                    {"command": "privacy", "description": "Политика конфиденциальности"},
                     {"command": "stat", "description": "Статистика"},
                 ],
             },
