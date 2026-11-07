@@ -1088,6 +1088,19 @@
       } catch (error) {}
     }
 
+    function startProduct() {
+      let param = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+      if (!param) {
+        try {
+          const query = new URLSearchParams(window.location.search);
+          param = query.get("tgWebAppStartParam") || query.get("startapp") || query.get("product") || "";
+        } catch (error) {}
+      }
+      param = String(param).toLowerCase();
+      if (param === "premium" || param === "stars") state.product = param;
+    }
+
+    startProduct();
     render();
     sendPaidOrders();
   </script>

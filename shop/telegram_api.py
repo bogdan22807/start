@@ -7,6 +7,8 @@ import urllib.request
 
 from shop.errors import ShopError
 
+SHOP_MENU = "Открыть магазин"
+
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -29,9 +31,14 @@ class TelegramApi:
         remove_keyboard: bool = False,
         open_button: tuple[str, str] | None = None,
         link_button: tuple[str, str] | None = None,
-    ) -> None:
+        link_buttons: list[tuple[str, str]] | None = None,
+    ) -> dict:
         payload: dict = {"chat_id": chat_id, "text": text}
-        if open_button is not None:
+        if link_buttons:
+            payload["reply_markup"] = {
+                "inline_keyboard": [[{"text": label, "url": url}] for label, url in link_buttons]
+            }
+        elif open_button is not None:
             label, url = open_button
             payload["reply_markup"] = {"inline_keyboard": [[{"text": label, "web_app": {"url": url}}]]}
         elif link_button is not None:
@@ -61,7 +68,20 @@ class TelegramApi:
                     [{"text": label, "callback_data": data} for label, data in row] for row in buttons
                 ]
             }
-        self._call("sendMessage", payload)
+        result = self._call("sendMessage", payload)
+        return result if isinstance(result, dict) else {}
+
+    def delete_message(self, chat_id: int, message_id: int) -> None:
+        self._call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+
+    def set_chat_menu_button(self, chat_id: int, url: str) -> None:
+        self._call(
+            "setChatMenuButton",
+            {
+                "chat_id": chat_id,
+                "menu_button": {"type": "web_app", "text": SHOP_MENU, "web_app": {"url": url}},
+            },
+        )
 
     def answer_callback(self, callback_id: str) -> None:
         self._call("answerCallbackQuery", {"callback_query_id": callback_id})
@@ -85,7 +105,7 @@ class TelegramApi:
     def set_menu_button(self, url: str) -> None:
         self._call(
             "setChatMenuButton",
-            {"menu_button": {"type": "web_app", "text": "Открыть", "web_app": {"url": url}}},
+            {"menu_button": {"type": "web_app", "text": SHOP_MENU, "web_app": {"url": url}}},
         )
 
     def clear_menu_button(self) -> None:
