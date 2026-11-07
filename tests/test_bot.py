@@ -127,7 +127,7 @@ class BotTests(unittest.TestCase):
 
     def test_privacy_page_covers_data_partners_and_rights(self):
         page = Path(__file__).parents[1].joinpath("public/privacy.html").read_text(encoding="utf-8")
-        for word in ("Telegram ID", "Fragment", "Crypto Bot", "monobank", "Vercel", "@Bogdan22807", "удалить"):
+        for word in ("Telegram ID", "Fragment", "Crypto Bot", "monobank", "Vercel", "Supabase", "@Bogdan22807", "удалить"):
             self.assertIn(word, page)
         shop = Path(__file__).parents[1].joinpath("public/index.html").read_text(encoding="utf-8")
         self.assertIn('href="/privacy"', shop)

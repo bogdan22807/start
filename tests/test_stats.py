@@ -258,9 +258,9 @@ class StatsTests(unittest.TestCase):
         api.set_admin_commands(7)
         public = capture.calls[0][1]["commands"]
         private = capture.calls[1][1]
-        self.assertEqual([item["command"] for item in public], ["start", "privacy"])
+        self.assertEqual([item["command"] for item in public], ["start"])
         self.assertEqual(private["scope"], {"type": "chat", "chat_id": 7})
-        self.assertEqual([item["command"] for item in private["commands"]], ["start", "privacy", "stat"])
+        self.assertEqual([item["command"] for item in private["commands"]], ["start", "stat"])
 
 
 class Capture:

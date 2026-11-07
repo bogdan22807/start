@@ -162,13 +162,17 @@ def stat_text() -> str:
     try:
         report = build_report(*load_state())
         entire = report["periods"]["all"]
+        today = report["periods"]["1"]
     except Exception:
         entire = {"users": 0, "orders": 0, "sum": "0.00"}
+        today = {"users": 0, "orders": 0, "sum": "0.00"}
     return (
         "📊 Статистика\n\n"
+        f"Сегодня: {today['orders']} заказов · {today['sum']} USDT · +{today['users']} польз.\n\n"
         f"👤 Пользователи: {entire['users']}\n"
         f"⭐ Заказы: {entire['orders']}\n"
-        f"💰 Сумма: {entire['sum']} USDT"
+        f"💰 Сумма: {entire['sum']} USDT\n\n"
+        "Подробно — кнопкой ниже 👇"
     )
 
 

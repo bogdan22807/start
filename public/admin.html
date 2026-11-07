@@ -9,25 +9,28 @@
   <style>
     :root {
       --bg: #FFFAF6;
-      --card: #fff;
+      --card: #ffffff;
+      --card-2: #F4EFEA;
       --line: #E6E6E6;
       --text: #111111;
       --muted: #8E8E93;
       --label: #9A948E;
       --blue: #1B86EE;
-      --gold: #FACE13;
       --soft: #7EBAFF;
-      --idle: #4A4A4E;
+      --gold: #FACE13;
+      --green: #2FB36B;
+      --ring: rgba(17, 17, 17, 0.05);
     }
     html[data-theme="dark"] {
       color-scheme: dark;
       --bg: #000000;
       --card: #161616;
+      --card-2: #202022;
       --line: #2c2c2e;
       --text: #f4f4f5;
       --muted: #a1a1a6;
       --label: #8e8e93;
-      --idle: #d0d0d4;
+      --ring: rgba(255, 255, 255, 0.05);
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; background: var(--bg); color: var(--text); }
@@ -35,84 +38,100 @@
       min-height: 100dvh;
       font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
     }
     button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
     .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .app {
-      width: min(100%, 440px);
+      width: min(100%, 480px);
       min-height: 100dvh;
       margin: 0 auto;
-      padding: 14px 16px calc(22px + env(safe-area-inset-bottom));
+      padding: 14px 16px calc(28px + env(safe-area-inset-bottom));
       background:
         radial-gradient(160px 100px at 18% 72px, rgba(250, 206, 19, 0.2), transparent 72%),
         var(--bg);
     }
     .top { display: flex; align-items: center; gap: 10px; }
-    h1 {
-      margin: 0;
-      font-size: 28px;
-      line-height: 1.05;
-      font-weight: 760;
-      letter-spacing: -0.045em;
+    h1 { margin: 0; font-size: 28px; line-height: 1.05; font-weight: 760; letter-spacing: -0.045em; }
+    .badge, .icon-btn {
+      width: 42px; height: 42px; flex: none; display: grid; place-items: center;
+      border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--ring);
     }
-    .badge {
-      width: 42px;
-      height: 42px;
-      flex: none;
-      display: grid;
-      place-items: center;
-      border-radius: 14px;
-      background: var(--card);
-      box-shadow: 0 8px 18px rgba(196, 156, 40, 0.16), 0 0 0 1px rgba(17, 17, 17, 0.04);
-    }
+    .badge { box-shadow: 0 8px 18px rgba(196, 156, 40, 0.16), 0 0 0 1px var(--ring); }
     .badge svg { width: 22px; height: 22px; }
-    #theme {
-      margin-left: auto;
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      border-radius: 14px;
-      background: var(--card);
-      box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 0 0 1px rgba(17, 17, 17, 0.045);
-    }
-    #theme svg { width: 18px; height: 18px; grid-area: 1 / 1; }
+    .icon-btn svg { width: 18px; height: 18px; grid-area: 1 / 1; }
+    .tools { margin-left: auto; display: flex; gap: 8px; }
     html[data-theme="dark"] #theme .moon,
     html[data-theme="light"] #theme .sun { display: none; }
-    .metrics { display: grid; gap: 8px; margin-top: 18px; }
-    .metric {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-height: 72px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: var(--card);
-      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
+    #refresh.spin svg { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sub { margin: 6px 0 0 52px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(47, 179, 107, 0.18); }
+    .dot.warn { background: var(--gold); box-shadow: 0 0 0 3px rgba(250, 206, 19, 0.18); }
+
+    .periods {
+      margin-top: 18px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px;
+      border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--ring);
     }
-    .metric .ico { width: 32px; height: 32px; flex: none; }
-    .metric span {
-      color: var(--label);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+    .periods button {
+      height: 34px; border-radius: 10px; font-size: 13px; font-weight: 650; color: var(--muted);
+      transition: background .2s, color .2s;
     }
-    .metric strong {
-      margin-left: auto;
-      font-size: 26px;
-      line-height: 1;
-      font-weight: 760;
-      letter-spacing: -0.04em;
-    }
-    .metric em { font-style: normal; color: var(--muted); font-size: 13px; font-weight: 650; }
+    .periods button.on { background: var(--blue); color: #fff; }
+
+    .card { margin-top: 10px; padding: 16px; border-radius: 18px; background: var(--card); box-shadow: 0 0 0 1px var(--ring); }
+    .kicker { color: var(--label); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .hero-sum { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+    .hero-sum strong { font-size: 40px; line-height: 1; font-weight: 780; letter-spacing: -0.05em; }
+    .hero-sum em { font-style: normal; color: var(--muted); font-weight: 650; }
+    .hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .mini { padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+    .mini b { display: block; font-size: 20px; font-weight: 740; letter-spacing: -0.03em; }
+    .mini span { color: var(--muted); font-size: 12px; font-weight: 600; }
+
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .tile { padding: 14px; border-radius: 18px; background: var(--card); box-shadow: 0 0 0 1px var(--ring); display: flex; gap: 10px; align-items: center; }
+    .tile svg { width: 30px; height: 30px; flex: none; }
+    .tile b { display: block; font-size: 22px; font-weight: 760; letter-spacing: -0.04em; line-height: 1.1; }
+    .tile span { color: var(--muted); font-size: 12px; font-weight: 600; }
+
+    .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .chart-pick { color: var(--muted); font-size: 13px; text-align: right; min-height: 18px; }
+    .chart-pick b { color: var(--text); }
+    #chart { display: block; width: 100%; height: 150px; margin-top: 12px; touch-action: pan-y; }
+    #chart rect.bar { fill: var(--blue); opacity: .9; transition: opacity .15s; }
+    #chart rect.bar.empty { fill: var(--line); opacity: 1; }
+    #chart rect.bar.pick { fill: var(--gold); opacity: 1; }
+    #chart text { fill: var(--muted); font-size: 10px; }
+    #chart line { stroke: var(--line); }
+
+    .split { margin-top: 14px; }
+    .split:first-of-type { margin-top: 10px; }
+    .split-line { display: flex; justify-content: space-between; font-size: 14px; gap: 8px; }
+    .split-line span { color: var(--muted); display: flex; align-items: center; gap: 7px; }
+    .split-line span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+    .split-line + .split-line span::before { background: var(--blue); }
+    .split-line b { font-weight: 680; }
+    .track { margin-top: 6px; height: 8px; border-radius: 99px; background: var(--card-2); overflow: hidden; display: flex; }
+    .track i { display: block; height: 100%; transition: width .4s ease; }
+    .track .a { background: var(--gold); }
+    .track .b { background: var(--blue); }
+    .legend { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+    .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+    .orders { list-style: none; margin: 8px 0 0; padding: 0; }
+    .orders li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+    .orders li:first-child { border-top: 0; }
+    .orders svg { width: 30px; height: 30px; flex: none; }
+    .orders .what { min-width: 0; flex: 1; }
+    .orders .what b { display: block; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .orders .what span { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .orders .sum { font-weight: 720; white-space: nowrap; }
+    .empty-note { color: var(--muted); font-size: 14px; margin: 10px 0 2px; }
+
     .status, .lock {
-      margin: 18px 0 0;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: var(--card);
-      color: var(--muted);
-      box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.05);
+      margin: 18px 0 0; padding: 14px 16px; border-radius: 16px; background: var(--card);
+      color: var(--muted); box-shadow: 0 0 0 1px var(--ring);
     }
     .lock { color: var(--text); font-weight: 650; }
     [hidden] { display: none !important; }
@@ -136,39 +155,90 @@
   </svg>
   <main class="app">
     <div class="top">
-      <div class="badge" aria-hidden="true">
-        <svg viewBox="0 0 64 64"><use href="#star"/></svg>
-      </div>
+      <div class="badge" aria-hidden="true"><svg viewBox="0 0 64 64"><use href="#star"/></svg></div>
       <h1>Статистика</h1>
-      <button type="button" id="theme" aria-label="Включить светлую тему">
-        <svg class="sun" viewBox="0 0 24 24" aria-hidden="true">
-          <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-            <circle cx="12" cy="12" r="3.5"/>
-            <path d="M12 3.1v2M12 18.9v2M3.1 12h2M18.9 12h2M5.7 5.7l1.4 1.4M16.9 16.9l1.4 1.4M18.3 5.7l-1.4 1.4M7.1 16.9l-1.4 1.4"/>
-          </g>
-        </svg>
-        <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="currentColor" d="M14.6 3.2a7.2 7.2 0 1 0 5.7 11.7A5.9 5.9 0 0 1 14.6 3.2z"/>
-        </svg>
-      </button>
+      <div class="tools">
+        <button type="button" class="icon-btn" id="refresh" aria-label="Обновить">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="theme" aria-label="Включить светлую тему">
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+              <circle cx="12" cy="12" r="3.5"/>
+              <path d="M12 3.1v2M12 18.9v2M3.1 12h2M18.9 12h2M5.7 5.7l1.4 1.4M16.9 16.9l1.4 1.4M18.3 5.7l-1.4 1.4M7.1 16.9l-1.4 1.4"/>
+            </g>
+          </svg>
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.6 3.2a7.2 7.2 0 1 0 5.7 11.7A5.9 5.9 0 0 1 14.6 3.2z"/></svg>
+        </button>
+      </div>
     </div>
+    <p class="sub" id="sub" hidden><span class="dot" id="dot"></span><span id="subText"></span></p>
+
     <p class="status" id="status">Считаю…</p>
     <p class="lock" id="lock" hidden></p>
+
     <section id="panel" hidden>
-      <div class="metrics">
-        <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#user"/></svg><span>Пользователи</span><strong id="users">0</strong></div>
-        <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#gem"/></svg><span>Заказы</span><strong id="orders">0</strong></div>
-        <div class="metric"><svg class="ico" viewBox="0 0 64 64" aria-hidden="true"><use href="#star"/></svg><span>Сумма</span><strong id="sum">0.00 <em>USDT</em></strong></div>
+      <div class="periods" id="periods">
+        <button type="button" data-period="1" class="on">Сегодня</button>
+        <button type="button" data-period="3">3 дня</button>
+        <button type="button" data-period="7">7 дней</button>
+        <button type="button" data-period="30">30 дней</button>
+        <button type="button" data-period="all">Всё</button>
+      </div>
+
+      <div class="card">
+        <div class="kicker">Сумма</div>
+        <div class="hero-sum"><strong id="sum">0.00</strong><em>USDT</em></div>
+        <div class="hero-row">
+          <div class="mini"><b id="orders">0</b><span>Заказы</span></div>
+          <div class="mini"><b id="average">0.00</b><span>Средний чек, USDT</span></div>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#user"/></svg><div><b id="users">0</b><span>Пользователи</span></div></div>
+        <div class="tile"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#star"/></svg><div><b id="stars">0</b><span>Звёзд продано</span></div></div>
+      </div>
+
+      <div class="card">
+        <div class="chart-head">
+          <div class="kicker">Выручка</div>
+          <div class="chart-pick" id="pick">Нажмите на столбик</div>
+        </div>
+        <svg id="chart" role="img" aria-label="Выручка по времени"></svg>
+      </div>
+
+      <div class="card">
+        <div class="kicker">Что покупают</div>
+        <div class="split">
+          <div class="split-line"><span>Звёзды</span><b id="starsSum">0.00 USDT · 0</b></div>
+          <div class="split-line"><span>Premium</span><b id="premiumSum">0.00 USDT · 0</b></div>
+          <div class="track"><i class="a" id="starsBar"></i><i class="b" id="premiumBar"></i></div>
+        </div>
+        <div class="kicker" style="margin-top:18px">Чем платят</div>
+        <div class="split">
+          <div class="split-line"><span>Карта</span><b id="cardSum">0.00 USDT · 0</b></div>
+          <div class="split-line"><span>Crypto Bot</span><b id="cryptoSum">0.00 USDT · 0</b></div>
+          <div class="track"><i class="a" id="cardBar"></i><i class="b" id="cryptoBar"></i></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="kicker">Последние заказы</div>
+        <ul class="orders" id="recent"></ul>
+        <p class="empty-note" id="noOrders" hidden>Пока нет оплаченных заказов.</p>
       </div>
     </section>
   </main>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     const THEME_KEY = "shop-bg";
+    const PERIOD_KEY = "stat-period";
     const tg = window.Telegram && window.Telegram.WebApp;
-    const status = document.getElementById("status");
-    const lock = document.getElementById("lock");
-    const panel = document.getElementById("panel");
+    const $ = (id) => document.getElementById(id);
+    let report = null;
+    let period = "1";
+    try { period = localStorage.getItem(PERIOD_KEY) || "1"; } catch (error) {}
 
     function paintChrome(color) {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -185,31 +255,183 @@
       const dark = theme === "dark";
       document.documentElement.dataset.theme = dark ? "dark" : "light";
       document.documentElement.style.colorScheme = dark ? "dark" : "light";
-      document.getElementById("theme").setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
+      $("theme").setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
       paintChrome(dark ? "#000000" : "#FFFAF6");
       try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (error) {}
     }
 
     function numberText(value) {
-      return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+      return String(value == null ? 0 : value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     }
 
-    function moneyValue(value) {
+    function money(value) {
       const text = String(value || "0.00").replace(/\s/g, "");
-      const negative = text.startsWith("-");
-      const [whole, frac] = (negative ? text.slice(1) : text).split(".");
-      return (negative ? "−" : "") + numberText(whole || "0") + "." + (frac || "00");
+      const [whole, frac] = text.split(".");
+      return numberText(whole || "0") + "." + ((frac || "00") + "00").slice(0, 2);
     }
 
-    function show(data) {
-      document.getElementById("users").textContent = numberText(data.users);
-      document.getElementById("orders").textContent = numberText(data.orders);
-      document.getElementById("sum").innerHTML = moneyValue(data.sum) + ' <em>USDT</em>';
+    function esc(text) {
+      return String(text == null ? "" : text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
 
-    document.getElementById("theme").addEventListener("click", () => {
+    function share(part, other) {
+      const a = Number(part) || 0, b = Number(other) || 0;
+      if (a + b <= 0) return [0, 0];
+      return [a / (a + b) * 100, b / (a + b) * 100];
+    }
+
+    function splitLine(id, data) {
+      const item = data || { orders: 0, sum: "0.00" };
+      $(id).textContent = money(item.sum) + " USDT · " + numberText(item.orders);
+    }
+
+    function drawChart(points) {
+      const svg = $("chart");
+      const width = svg.clientWidth || 320;
+      const height = 150;
+      const bottom = 18;
+      const list = points || [];
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      const max = Math.max(0, ...list.map((p) => Number(p.sum) || 0));
+      const gap = list.length > 20 ? 2 : 4;
+      const barW = list.length ? Math.max(2, (width - gap * (list.length - 1)) / list.length) : 0;
+      const step = Math.max(1, Math.ceil(list.length / 6));
+      let html = '<line x1="0" x2="' + width + '" y1="' + (height - bottom + 0.5) + '" y2="' + (height - bottom + 0.5) + '"/>';
+      list.forEach((p, i) => {
+        const value = Number(p.sum) || 0;
+        const h = max > 0 ? Math.max(value > 0 ? 3 : 2, (height - bottom - 8) * value / max) : 2;
+        const x = i * (barW + gap);
+        const y = height - bottom - h;
+        html += '<rect class="bar' + (value > 0 ? "" : " empty") + '" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(4, barW / 2).toFixed(1) + '"/>';
+        if (i % step === 0 || i === list.length - 1) {
+          const first = i === 0, last = i === list.length - 1 && list.length > 1;
+          const anchor = first ? "start" : last ? "end" : "middle";
+          const tx = first ? x : last ? x + barW : x + barW / 2;
+          html += '<text x="' + tx.toFixed(1) + '" y="' + (height - 4) + '" text-anchor="' + anchor + '">' + esc(p.label) + "</text>";
+        }
+      });
+      svg.innerHTML = html;
+      $("pick").textContent = list.length ? "Нажмите на столбик" : "";
+    }
+
+    function pickBar(event) {
+      const bar = event.target.closest("rect.bar");
+      if (!bar || !report) return;
+      const points = report.periods[period].points || [];
+      const p = points[Number(bar.dataset.i)];
+      if (!p) return;
+      $("chart").querySelectorAll("rect.pick").forEach((node) => node.classList.remove("pick"));
+      bar.classList.add("pick");
+      $("pick").innerHTML = esc(p.title) + ": <b>" + money(p.sum) + " USDT</b> · " + numberText(p.orders) + " зак. · +" + numberText(p.users);
+      if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (error) {} }
+    }
+
+    function orderTitle(item) {
+      if (item.kind === "premium") return "Premium" + (item.quantity ? " на " + item.quantity + " мес." : "");
+      if (item.kind === "stars") return (item.quantity ? numberText(item.quantity) + " " : "") + "звёзд";
+      return "Заказ " + item.id;
+    }
+
+    function renderRecent(list) {
+      const items = list || [];
+      $("noOrders").hidden = items.length > 0;
+      $("recent").innerHTML = items.map((item) => {
+        const icon = item.kind === "premium" ? "#gem" : "#star";
+        const to = item.recipient ? " → @" + esc(item.recipient) : "";
+        const how = item.source === "card" ? "карта" : item.source === "cryptobot" ? "Crypto Bot" : "";
+        const meta = [esc(item.when), how, item.buyer ? "от @" + esc(item.buyer) : ""].filter(Boolean).join(" · ");
+        return '<li><svg viewBox="0 0 64 64" aria-hidden="true"><use href="' + icon + '"/></svg>' +
+          '<div class="what"><b>' + esc(orderTitle(item)) + to + "</b><span>" + meta + "</span></div>" +
+          '<div class="sum">' + money(item.amount) + "</div></li>";
+      }).join("");
+    }
+
+    function render() {
+      if (!report) return;
+      const data = report.periods[period] || report.periods.all;
+      document.querySelectorAll("#periods button").forEach((b) => b.classList.toggle("on", b.dataset.period === period));
+      $("sum").textContent = money(data.sum);
+      $("orders").textContent = numberText(data.orders);
+      $("average").textContent = money(data.average);
+      $("users").textContent = numberText(data.users);
+      $("stars").textContent = numberText(data.stars || 0);
+      const products = data.products || {};
+      const sources = data.sources || {};
+      splitLine("starsSum", products.stars);
+      splitLine("premiumSum", products.premium);
+      splitLine("cardSum", sources.card);
+      splitLine("cryptoSum", sources.cryptobot);
+      const [s, p] = share(products.stars && products.stars.sum, products.premium && products.premium.sum);
+      $("starsBar").style.width = s + "%";
+      $("premiumBar").style.width = p + "%";
+      const [c, k] = share(sources.card && sources.card.sum, sources.cryptobot && sources.cryptobot.sum);
+      $("cardBar").style.width = c + "%";
+      $("cryptoBar").style.width = k + "%";
+      drawChart(data.points);
+    }
+
+    function stamp() {
+      const now = new Date();
+      const time = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+      const saved = report && report.storage === "supabase";
+      $("dot").classList.toggle("warn", !saved);
+      $("subText").textContent = (saved ? "Supabase" : "Временное хранилище") + " · обновлено в " + time;
+      $("sub").hidden = false;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
+    const snapshot = hash || params.get("s") || "";
+    const initData = tg && tg.initData ? tg.initData : "";
+
+    async function load() {
+      $("refresh").classList.add("spin");
+      try {
+        const response = await fetch("/api/stat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ init_data: initData, snapshot })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 403) {
+          $("status").hidden = true;
+          $("panel").hidden = true;
+          $("lock").hidden = false;
+          $("lock").textContent = body.message || "Эта панель только для администратора.";
+          return;
+        }
+        if (!response.ok || !body.periods) {
+          $("status").hidden = false;
+          $("status").textContent = body.message || "Не удалось посчитать статистику.";
+          return;
+        }
+        report = body;
+        $("status").hidden = true;
+        $("panel").hidden = false;
+        render();
+        renderRecent(report.recent);
+        stamp();
+      } catch (error) {
+        $("status").hidden = false;
+        $("status").textContent = "Нет связи с магазином.";
+      } finally {
+        $("refresh").classList.remove("spin");
+      }
+    }
+
+    $("theme").addEventListener("click", () => {
       applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
+    $("refresh").addEventListener("click", load);
+    $("periods").addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      period = button.dataset.period;
+      try { localStorage.setItem(PERIOD_KEY, period); } catch (error) {}
+      render();
+    });
+    $("chart").addEventListener("click", pickBar);
+    window.addEventListener("resize", () => { if (report) drawChart(report.periods[period].points); });
 
     if (tg) {
       tg.ready();
@@ -221,33 +443,7 @@
     let savedTheme = "dark";
     try { savedTheme = localStorage.getItem(THEME_KEY) || "dark"; } catch (error) {}
     applyTheme(savedTheme);
-
-    const params = new URLSearchParams(location.search);
-    const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
-    const snapshot = hash || params.get("s") || "";
-    const initData = tg && tg.initData ? tg.initData : "";
-    fetch("/api/stat", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({init_data: initData, snapshot})
-    }).then(async (response) => {
-      const body = await response.json().catch(() => ({}));
-      if (response.status === 403) {
-        status.hidden = true;
-        lock.hidden = false;
-        lock.textContent = body.message || "Эта панель только для администратора.";
-        return;
-      }
-      if (!response.ok || !body.periods) {
-        status.textContent = body.message || "Не удалось посчитать статистику.";
-        return;
-      }
-      status.hidden = true;
-      panel.hidden = false;
-      show(body.periods.all);
-    }).catch(() => {
-      status.textContent = "Нет связи с магазином.";
-    });
+    load();
   </script>
 </body>
 </html>
