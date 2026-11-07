@@ -265,6 +265,20 @@ class StatsTests(unittest.TestCase):
         self.assertEqual([item["command"] for item in private["commands"]], ["start", "stat"])
 
 
+class ResetCommandsTests(unittest.TestCase):
+    def test_reset_clears_every_shared_scope_and_keeps_only_start(self):
+        capture = Capture()
+        TelegramApi(TOKEN, opener=capture).reset_commands()
+        deleted = [payload for method, payload in capture.calls if method == "deleteMyCommands"]
+        types = {payload["scope"]["type"] for payload in deleted}
+        self.assertEqual(types, {"default", "all_private_chats", "all_group_chats", "all_chat_administrators"})
+        self.assertIn({"scope": {"type": "all_private_chats"}, "language_code": "ru"}, deleted)
+        self.assertNotIn({"scope": {"type": "default"}}, deleted)
+        method, payload = capture.calls[-1]
+        self.assertEqual(method, "setMyCommands")
+        self.assertEqual([item["command"] for item in payload["commands"]], ["start"])
+
+
 class Capture:
     def __init__(self):
         self.calls = []

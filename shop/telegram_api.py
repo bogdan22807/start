@@ -8,6 +8,13 @@ import urllib.request
 from shop.errors import ShopError
 
 SHOP_MENU = "Открыть магазин"
+COMMAND_SCOPES = (
+    {"type": "default"},
+    {"type": "all_private_chats"},
+    {"type": "all_group_chats"},
+    {"type": "all_chat_administrators"},
+)
+COMMAND_LANGUAGES = ("", "ru", "uk", "en", "be", "kk")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -134,6 +141,29 @@ class TelegramApi:
                 ]
             },
         )
+
+    def get_commands(self, scope: dict | None = None, language_code: str = "") -> list[str]:
+        payload: dict = {}
+        if scope:
+            payload["scope"] = scope
+        if language_code:
+            payload["language_code"] = language_code
+        result = self._call("getMyCommands", payload)
+        if not isinstance(result, list):
+            return []
+        return [item.get("command", "") for item in result if isinstance(item, dict)]
+
+    def reset_commands(self) -> None:
+        """Clear every shared command list, so old ones (BotFather, older code, languages) cannot show /stat."""
+        for scope in COMMAND_SCOPES:
+            for language in COMMAND_LANGUAGES:
+                if scope["type"] == "default" and not language:
+                    continue
+                payload: dict = {"scope": scope}
+                if language:
+                    payload["language_code"] = language
+                self._call("deleteMyCommands", payload)
+        self.set_commands()
 
     def set_admin_commands(self, chat_id: int) -> None:
         self._call(
