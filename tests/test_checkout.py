@@ -49,6 +49,8 @@ def purchase_env(**extra):
         "WEBAPP_URL",
         "CRYPTO_PAY_BASE",
         "FRAGMENT_API_BASE",
+        "PAYSTARS_API_KEY",
+        "PAYSTARS_API_BASE",
         "SHOP_NOTIFY_FILE",
         "MONOBANK_TOKEN",
         "MONO_TOKEN",

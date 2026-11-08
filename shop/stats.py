@@ -162,6 +162,49 @@ def remember_invoice(
             conn.close()
 
 
+def delivery_remote(key: str) -> str | None:
+    """Supplier order id saved for this purchase, so a retry checks it instead of buying again."""
+    text = key[:128] if isinstance(key, str) else ""
+    if not text:
+        return None
+    if supabase_ready():
+        value = _rpc("shop_delivery_get", {"p_key": text})
+        return value if isinstance(value, str) and value else None
+    try:
+        with _LOCK:
+            conn = _connect()
+            try:
+                row = conn.execute("SELECT remote_id FROM deliveries WHERE key = ?", (text,)).fetchone()
+            finally:
+                conn.close()
+    except sqlite3.Error:
+        return None
+    return row["remote_id"] if row else None
+
+
+def remember_delivery(key: str, remote_id: object, provider: str = "paystars") -> None:
+    text = key[:128] if isinstance(key, str) else ""
+    remote = str(remote_id).strip()[:80] if remote_id not in (None, "") else ""
+    if not text or not remote:
+        return
+    if supabase_ready():
+        _rpc("shop_delivery_set", {"p_key": text, "p_provider": provider[:16], "p_remote_id": remote})
+        return
+    try:
+        with _LOCK:
+            conn = _connect()
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO deliveries (key, provider, remote_id, created_at) VALUES (?, ?, ?, ?)",
+                    (text, provider[:16], remote, _iso(datetime.now(timezone.utc))),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+    except sqlite3.Error:
+        return
+
+
 def load_state() -> tuple[list[dict], list[dict]]:
     if supabase_ready():
         state = _rpc("shop_load_state", {})
@@ -611,6 +654,16 @@ def _connect() -> sqlite3.Connection:
     for name, kind in (("kind", "TEXT"), ("quantity", "INTEGER"), ("recipient", "TEXT")):
         if name not in columns:
             conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {kind}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deliveries (
+            key TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            remote_id TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
     return conn
 
 

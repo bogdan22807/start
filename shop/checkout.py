@@ -19,6 +19,7 @@ from shop.errors import ShopError
 from shop.fragment import PRODUCTION_BASE as FRAGMENT_BASE
 from shop.fragment import FragmentClient
 from shop.monobank import CARD_ID
+from shop.paystars import PaystarsClient, normalize_status, paystars_api_key, paystars_base
 from shop.monobank import Monobank
 from shop.monobank import card_currency, monobank_token, nbu_usd_rate, verify_sign
 from shop.receipt import send_receipt
@@ -37,7 +38,7 @@ _STAR_PRICES = {
 _PREMIUM_PRICES = {3: "14.99", 6: "19.99", 12: "36.24"}
 _STAR_MIN = 50
 _STAR_MAX = 100_000
-_RETRYABLE = {"insufficient_balance", "fragment_unavailable", "rate_limited", "idempotency_conflict", "missing_token"}
+_RETRYABLE = {"insufficient_balance", "fragment_unavailable", "rate_limited", "idempotency_conflict", "missing_token", "price_changed"}
 _PUBLIC_SHOP = "https://start-bogdan22807s-projects.vercel.app"
 
 
@@ -54,9 +55,14 @@ def purchases_blocked_reason() -> str | None:
         return "Оплата выключена: в настройках стоит SHOP_MODE=dry-run. Уберите её или поставьте live."
     if not os.environ.get("CRYPTO_PAY_TOKEN", "").strip():
         return "Оплата пока не готова: в настройках магазина нет токена Crypto Bot."
-    if not fragment_api_token():
-        return "Оплата пока не готова: в настройках магазина нет ключа Fragment."
+    if not supplier_ready():
+        return "Оплата пока не готова: в настройках магазина нет ключа PayStars (PAYSTARS_API_KEY)."
     return None
+
+
+def supplier_ready() -> bool:
+    """PayStars when PAYSTARS_API_KEY is set, otherwise the old Fragment API key."""
+    return bool(paystars_api_key() or fragment_api_token())
 
 
 def require_purchases() -> None:
@@ -469,8 +475,8 @@ def _require_card() -> str:
             "Оплата картой пока не готова: в настройках магазина нет токена Monobank. Назовите его MONOBANK_TOKEN.",
             503,
         )
-    if not fragment_api_token():
-        raise ShopError("purchases_off", "Оплата пока не готова: в настройках магазина нет ключа Fragment.", 503)
+    if not supplier_ready():
+        raise ShopError("purchases_off", "Оплата пока не готова: в настройках магазина нет ключа PayStars (PAYSTARS_API_KEY).", 503)
     return token
 
 
@@ -537,6 +543,9 @@ def _charge_text(minor: int, ccy: int) -> str:
 
 
 def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, sender=None, prefix: str = "cryptopay") -> dict:
+    if isinstance(fragment, PaystarsClient) or (fragment is None and paystars_api_key()):
+        client = fragment if isinstance(fragment, PaystarsClient) else PaystarsClient(paystars_api_key(), paystars_base())
+        return _deliver_paystars(order, invoice_id, client, sender=sender, prefix=prefix)
     client = fragment or FragmentClient(fragment_api_token(), _fragment_base())
     try:
         if order["kind"] == "stars":
@@ -596,9 +605,67 @@ def _deliver(order: dict, invoice_id: object, fragment: FragmentClient | None, s
     return _progress(invoice_id, f"Оплата прошла. Покупка ещё отправляется на @{order['recipient']}.", retry=True)
 
 
-def _delivery_error(order: dict, invoice_id: object, exc: ShopError) -> dict:
+def _deliver_paystars(order: dict, invoice_id: object, client: PaystarsClient, *, sender=None, prefix: str) -> dict:
+    """Buy on PayStars once per paid invoice.
+
+    A PayStars verification token is new on every check, so the same
+    Idempotency-Key with a fresh token would be a different payload (409).
+    The PayStars order id is saved after the first purchase; later checks of
+    the same invoice only read that order.
+    """
+    from shop.stats import delivery_remote, remember_delivery
+
+    kind = order["kind"]
+    count = order["amount"] if kind == "stars" else order["months"]
+    key = f"{prefix}-{invoice_id}"[:128]
+    remote_id = delivery_remote(key)
+    try:
+        if remote_id:
+            remote = client.get_order(remote_id)
+        else:
+            token = client.check(order["recipient"], kind)
+            cost = client.quote(kind, order["recipient"], count)
+            if cost > _cents(order["total"]):
+                print(f"paystars: cost {cost} above price {order['total']} for {key}")
+                return _progress(
+                    invoice_id,
+                    "Оплата прошла. Себестоимость у поставщика сейчас выше цены, покупку проверит администратор.",
+                    retry=False,
+                )
+            remote = client.buy(
+                kind=kind,
+                username=order["recipient"],
+                count=count,
+                verification_token=token,
+                max_usd=cost,
+                idempotency_key=key,
+            )
+            remote_id = remote.get("order_id")
+            if remote_id not in (None, ""):
+                remember_delivery(key, remote_id, client.provider)
+        status = normalize_status(remote.get("status"))
+    except ShopError as exc:
+        return _delivery_error(order, invoice_id, exc, supplier="PayStars", currency="USD")
+    if status == "completed":
+        if kind == "stars":
+            message = f"Звёзды отправлены на @{order['recipient']}."
+        else:
+            message = f"Premium отправлен на @{order['recipient']}."
+        send_receipt(order, invoice_id, sender=sender)
+        return _progress(invoice_id, message, retry=False, delivered=True)
+    if status == "failed":
+        detail = (remote.get("error") or remote.get("message")) if isinstance(remote, dict) else None
+        if not isinstance(detail, str) or not detail.strip():
+            detail = "Поставщик не смог отправить покупку."
+        return _progress(invoice_id, "Оплата прошла. " + detail[:300], retry=False)
+    return _progress(invoice_id, f"Оплата прошла. Покупка ещё отправляется на @{order['recipient']}.", retry=True)
+
+
+def _delivery_error(order: dict, invoice_id: object, exc: ShopError, *, supplier: str = "Fragment", currency: str | None = None) -> dict:
     if exc.code == "insufficient_balance":
-        return _progress(invoice_id, f"Оплата прошла. На балансе Fragment не хватает {_wallet()}.", retry=True)
+        return _progress(invoice_id, f"Оплата прошла. На балансе {supplier} не хватает {currency or _wallet()}.", retry=True)
+    if exc.code == "premium_active":
+        return _progress(invoice_id, "Оплата прошла, но " + exc.message, retry=False)
     if exc.code in _RETRYABLE:
         return _progress(invoice_id, "Оплата прошла. Покупка ещё отправляется.", retry=True)
     if exc.code == "recipient_not_found":
