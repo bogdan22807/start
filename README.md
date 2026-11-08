@@ -10,6 +10,15 @@ Fragment API уже включает свою комиссию 10% в сумму
 
 По умолчанию `SHOP_MODE=dry-run`: Fragment не вызывается, в заказ пишется та же покупка, которую отправил бы живой режим. `SHOP_MARKUP_PERCENT` по умолчанию `0`.
 
+## Поставщик: PayStars
+
+Покупки звёзд и Premium после оплаты идут через [PayStars](https://paystars.uz/en/docs-api/), если задан `PAYSTARS_API_KEY`. Старый Fragment API (`FRAGMENT_API_KEY` / `API_TOKEN`) используется, только когда ключа PayStars нет.
+
+1. Создайте ключ в кабинете PayStars и положите его в Vercel как `PAYSTARS_API_KEY` (Sensitive, Production).
+2. Пополните USD-баланс PayStars через USDT (TON, BEP20 или TRC20).
+3. Перед покупкой магазин берёт цену `/usd/quote`. Если себестоимость выше цены, которую заплатил покупатель, покупка не делается и ждёт администратора.
+4. Номер заказа PayStars сохраняется в Supabase (`shop.deliveries`). Повторная проверка счёта только читает этот заказ и не покупает второй раз.
+
 ## Что нужно снаружи
 
 1. Ключ Fragment API в `API_TOKEN` (или `FRAGMENT_API_KEY`). Это заголовок `API-Key`. В репозиторий его класть нельзя.
